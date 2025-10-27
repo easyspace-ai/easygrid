@@ -371,9 +371,12 @@ export function TableViewV3({ sdk, isShareDBConnected }: TableViewV3Props) {
   // 当实时记录更新时，同步到本地状态
   useEffect(() => {
     if (realtimeRecord && realtimeRecord.data) {
-      console.log('📡 收到实时记录更新 (v2.1):', realtimeRecord);
-      console.log('📡 记录数据:', realtimeRecord.data);
-      console.log('📡 更新时间戳:', realtimeRecord._updateTime);
+      // 只在有实际数据变化时打印日志
+      console.log('📡 收到实时记录更新 (v2.1):', {
+        id: realtimeRecord.id,
+        dataKeys: Object.keys(realtimeRecord.data),
+        updateTime: realtimeRecord._updateTime
+      });
       
       setRecords(prevRecords => {
         const newRecords = prevRecords.map(record => 
@@ -381,15 +384,11 @@ export function TableViewV3({ sdk, isShareDBConnected }: TableViewV3Props) {
             ? { ...record, data: { ...realtimeRecord.data } }
             : record
         );
-        console.log('📡 更新后的记录数组:', newRecords);
         return newRecords;
       });
       
       // 强制触发UI更新
-      setUpdateTrigger(prev => {
-        console.log('📡 触发UI更新 (v2.1):', prev + 1);
-        return prev + 1;
-      });
+      setUpdateTrigger(prev => prev + 1);
     }
   }, [realtimeRecord, realtimeRecord?.data, realtimeRecord?._updateTime, testRecordId]);
 
@@ -419,7 +418,10 @@ export function TableViewV3({ sdk, isShareDBConnected }: TableViewV3Props) {
       id: record.id,
       ...record.data,
     }));
-    console.log('🔧 Grid 数据更新:', data.slice(0, 2)); // 只打印前2条记录
+    // 减少日志频率，只在数据真正变化时打印
+    if (data.length > 0) {
+      console.log('🔧 Grid 数据更新:', { recordCount: data.length, firstRecord: data[0] });
+    }
     return data;
   }, [records, updateTrigger]); // 添加 updateTrigger 依赖
 

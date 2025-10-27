@@ -127,12 +127,15 @@ export function useConnection() {
     localStorage.removeItem('user');
   };
 
-  // 获取 ShareDB 连接状态
+  // 获取 ShareDB 连接状态（移除频繁日志）
   const getShareDBConnectionState = () => {
     // 优先从SDK获取实时状态
     if (sdk) {
       const sdkState = sdk.getShareDBConnectionState();
-      console.log('🔍 SDK连接状态 (v2.1):', sdkState, '本地状态:', shareDBConnectionState);
+      // 只在状态不一致时打印警告日志
+      if (sdkState !== shareDBConnectionState) {
+        console.warn('⚠️ 连接状态不一致:', { sdkState, localState: shareDBConnectionState });
+      }
       return sdkState || shareDBConnectionState;
     }
     return shareDBConnectionState;

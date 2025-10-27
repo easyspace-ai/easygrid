@@ -7,29 +7,24 @@ export default function App() {
   const { sdk, isLoggedIn, user, login, logout, getShareDBConnectionState } = useConnection();
   const [showLogin, setShowLogin] = useState(!isLoggedIn);
   
-  // 版本检查 - 确保代码更新
-  console.log('🚀 App 启动 (v2.1) - 修复事件监听问题');
+  // 版本检查 - 确保代码更新（只在组件挂载时打印一次）
+  useEffect(() => {
+    console.log('🚀 App 启动 (v2.1) - 修复事件监听问题');
+  }, []);
   
-  // 强制刷新连接状态显示
+  // 降低连接状态刷新频率（从1秒改为5秒）
   const [connectionRefreshTrigger, setConnectionRefreshTrigger] = useState(0);
   
   useEffect(() => {
     const interval = setInterval(() => {
       setConnectionRefreshTrigger(prev => prev + 1);
-    }, 1000); // 每秒刷新一次连接状态
+    }, 5000); // 每5秒刷新一次连接状态，降低频率
     
     return () => clearInterval(interval);
   }, []);
   
-  // 强制刷新连接状态显示
-  const displayConnectionState = () => {
-    const currentState = getShareDBConnectionState();
-    console.log('🔄 强制刷新连接状态显示:', currentState);
-    return currentState;
-  };
-  
-  // 获取 ShareDB 连接状态（依赖刷新触发器）
-  const shareDBState = displayConnectionState();
+  // 获取 ShareDB 连接状态（移除不必要的日志）
+  const shareDBState = getShareDBConnectionState();
   const isShareDBConnected = shareDBState === 'connected';
 
   // 同步登录状态
@@ -38,15 +33,18 @@ export default function App() {
     setShowLogin(!isLoggedIn);
   }, [isLoggedIn]);
 
-  // ShareDB 连接状态调试
+  // ShareDB 连接状态调试（减少日志频率）
   useEffect(() => {
-    console.log('📊 ShareDB 连接状态 (v2.1):', {
-      shareDBState,
-      isShareDBConnected,
-      accessToken: !!sdk?.config.accessToken,
-      sdkConnectionState: sdk?.getShareDBConnectionState?.(),
-      refreshTrigger: connectionRefreshTrigger,
-    });
+    // 只在状态真正变化时或每5次刷新时打印日志
+    if (connectionRefreshTrigger % 5 === 0 || connectionRefreshTrigger === 1) {
+      console.log('📊 ShareDB 连接状态 (v2.1):', {
+        shareDBState,
+        isShareDBConnected,
+        accessToken: !!sdk?.config.accessToken,
+        sdkConnectionState: sdk?.getShareDBConnectionState?.(),
+        refreshTrigger: connectionRefreshTrigger,
+      });
+    }
   }, [shareDBState, isShareDBConnected, sdk?.config.accessToken, sdk, connectionRefreshTrigger]);
 
   const handleLogin = async (email: string, password: string) => {
