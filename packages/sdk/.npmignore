@@ -1,0 +1,49 @@
+# Source files
+src/
+
+# Examples
+examples/
+
+# Test files
+*.test.ts
+*.spec.ts
+test-results/
+coverage/
+
+# Configuration files
+.eslintrc.cjs
+tsconfig.json
+tsconfig.*.json
+.turbo/
+
+# Build tools
+*.tsbuildinfo
+
+# Development files
+.git/
+.gitignore
+.npmrc
+.DS_Store
+
+# Documentation (keep only README.md and LICENSE)
+PUBLISHING.md
+run-all-tests.sh
+
+# Logs
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# OS
+.DS_Store
+Thumbs.db
+

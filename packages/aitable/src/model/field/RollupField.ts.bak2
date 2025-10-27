@@ -1,0 +1,124 @@
+/**
+ * Rollup Field Model
+ * Aggregate/rollup fields from linked records
+ */
+
+import { Field } from './Field';
+
+export type RollupFunc =
+  | 'count'
+  | 'countEmpty'
+  | 'countNonEmpty'
+  | 'countUnique'
+  | 'sum'
+  | 'average'
+  | 'max'
+  | 'min'
+  | 'arrayJoin'
+  | 'arrayUnique';
+
+export interface IRollupFieldOptions {
+  expression?: {
+    linkFieldId?: string;
+    foreignFieldId?: string;
+    func?: RollupFunc;
+  };
+  formatting?: {
+    type?: 'text' | 'number' | 'date';
+    precision?: number;
+    dateFormat?: string;
+  };
+}
+
+export class RollupField extends Field {
+
+  constructor(config: any) {
+    super(config);
+    // Rollup fields are always computed
+    this.isComputed = true;
+  }
+
+  validate(value: unknown): boolean {
+    // Rollup fields are computed, so any value from the server is valid
+    return true;
+  }
+
+  format(value: unknown): string {
+    if (this.isEmpty(value)) {
+      return '';
+    }
+
+    const formatting = this.options.formatting;
+
+    switch (formatting?.type) {
+      case 'number':
+        if (typeof value === 'number') {
+          const precision = formatting.precision ?? 0;
+          return value.toFixed(precision);
+        }
+        return String(value);
+
+      case 'date':
+        if (value instanceof Date || typeof value === 'string') {
+          return String(value);
+        }
+        return String(value);
+
+      case 'text':
+      default:
+        if (Array.isArray(value)) {
+          return value.join(', ');
+        }
+        return String(value);
+    }
+  }
+
+  getEmptyValue(): null {
+    return null;
+  }
+
+  toCellValue(value: unknown): any {
+    // Rollup values come from the server
+    return value;
+  }
+
+  fromCellValue(cellValue: any): any {
+    if (cellValue === null || cellValue === undefined) {
+      return null;
+    }
+
+    return cellValue;
+  }
+
+  /**
+   * Get rollup configuration
+   */
+  getRollupConfig() {
+    return {
+      linkFieldId: ((this.options as any).expression)?.linkFieldId,
+      foreignFieldId: ((this.options as any).expression)?.foreignFieldId,
+      func: ((this.options as any).expression)?.func,
+    };
+  }
+
+  /**
+   * Check if rollup is properly configured
+   */
+  hasValidConfig(): boolean {
+    const config = this.getRollupConfig();
+    return Boolean(
+      config.linkFieldId &&
+      config.foreignFieldId &&
+      config.func
+    );
+  }
+
+  /**
+   * Get rollup function
+   */
+  getRollupFunc(): RollupFunc | undefined {
+    return ((this.options as any).expression)?.func;
+  }
+}
+
+

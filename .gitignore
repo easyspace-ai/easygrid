@@ -1,0 +1,377 @@
+# ===========================================
+# EasyGrid Monorepo .gitignore
+# ===========================================
+
+# ===========================================
+# 依赖管理
+# ===========================================
+
+# Node.js 依赖
+node_modules/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+lerna-debug.log*
+
+# pnpm
+.pnp
+.pnp.js
+.pnpm-store/
+.pnpm-debug.log*
+
+# ===========================================
+# 构建产物
+# ===========================================
+
+# 通用构建目录
+dist/
+build/
+out/
+.next/
+.vercel/
+.turbo/
+
+# TypeScript 构建信息
+*.tsbuildinfo
+tsconfig.tsbuildinfo
+
+# ===========================================
+# 开发工具
+# ===========================================
+
+# IDE 和编辑器
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# Cursor AI
+.cursor/
+
+# ===========================================
+# 环境变量和配置
+# ===========================================
+
+# 环境变量文件
+.env
+.env.local
+.env.development.local
+.env.test.local
+.env.production.local
+.env.*.local
+
+# 配置文件
+config.local.*
+*.local.*
+
+# ===========================================
+# 日志文件
+# ===========================================
+
+# 应用日志
+logs/
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+lerna-debug.log*
+
+# ===========================================
+# 缓存文件
+# ===========================================
+
+# 各种缓存
+.cache/
+.parcel-cache/
+.eslintcache
+.stylelintcache
+.turbo/
+
+# ===========================================
+# 测试相关
+# ===========================================
+
+# 测试覆盖率
+coverage/
+.nyc_output/
+junit.xml
+
+# Playwright
+test-results/
+playwright-report/
+playwright/.cache/
+
+# ===========================================
+# 操作系统文件
+# ===========================================
+
+# macOS
+.DS_Store
+.AppleDouble
+.LSOverride
+Icon?
+._*
+.DocumentRevisions-V100
+.fseventsd
+.Spotlight-V100
+.TemporaryItems
+.Trashes
+.VolumeIcon.icns
+.com.apple.timemachine.donotpresent
+.AppleDB
+.AppleDesktop
+Network Trash Folder
+Temporary Items
+.apdisk
+
+# Windows
+Thumbs.db
+Thumbs.db:encryptable
+ehthumbs.db
+ehthumbs_vista.db
+*.stackdump
+[Dd]esktop.ini
+$RECYCLE.BIN/
+*.cab
+*.msi
+*.msix
+*.msm
+*.msp
+*.lnk
+
+# Linux
+*~
+.fuse_hidden*
+.directory
+.Trash-*
+.nfs*
+
+# ===========================================
+# 临时文件
+# ===========================================
+
+# 临时文件
+*.tmp
+*.temp
+*.bak
+*.backup
+*.old
+*.orig
+
+# ===========================================
+# 数据库文件
+# ===========================================
+
+# SQLite
+*.db
+*.sqlite
+*.sqlite3
+
+# 数据库迁移临时文件
+*.migration
+
+# ===========================================
+# Go 相关 (apps/server)
+# ===========================================
+
+# Go 构建产物
+*.exe
+*.exe~
+*.dll
+*.so
+*.dylib
+*.test
+*.out
+go.work
+go.work.sum
+
+# Go 模块下载缓存
+go.sum.bak
+
+# ===========================================
+# Docker 相关
+# ===========================================
+
+# Docker 构建上下文
+.dockerignore
+
+# ===========================================
+# 包管理器锁文件 (选择性忽略)
+# ===========================================
+
+# 注意：pnpm-lock.yaml 通常应该提交，但如果有冲突可以临时忽略
+# pnpm-lock.yaml
+
+# ===========================================
+# 特定于项目的文件
+# ===========================================
+
+# 上传文件目录
+upload/
+uploads/
+
+# 公共资源目录 (如果包含生成的文件)
+public/generated/
+
+# 文档生成
+docs/generated/
+
+# ===========================================
+# 安全相关
+# ===========================================
+
+# 密钥文件
+*.key
+*.pem
+*.p12
+*.pfx
+secrets/
+.secrets/
+
+# ===========================================
+# 性能分析
+# ===========================================
+
+# 性能分析文件
+*.cpuprofile
+*.heapprofile
+*.heapsnapshot
+
+# ===========================================
+# 其他
+# ===========================================
+
+# 压缩文件
+*.zip
+*.tar.gz
+*.rar
+*.7z
+
+# 备份文件
+*.backup
+*.bak
+
+# 本地开发文件
+.local/
+local/
+
+# 调试文件
+debug.log
+debug-*.log
+
+# ===========================================
+# 项目特定忽略
+# ===========================================
+
+# teable-develop 项目 (第三方开发项目)
+# 如果需要完全忽略，取消下面的注释
+teable-develop/
+
+# 特定应用的构建产物
+apps/manage/dist/
+apps/docs/.next/
+apps/server/bin/
+
+# 包构建产物
+packages/*/dist/
+packages/*/lib/
+packages/*/es/
+packages/*/cjs/
+
+# ===========================================
+# 开发工具特定
+# ===========================================
+
+# Storybook
+storybook-static/
+
+# Chromatic
+chromatic-build.log
+
+# ===========================================
+# 监控和分析
+# ===========================================
+
+# 分析文件
+bundle-analyzer-report.html
+source-map-explorer-report.html
+
+# ===========================================
+# 版本控制
+# ===========================================
+
+# Git 相关
+.git/
+.gitattributes
+.gitmodules
+
+# ===========================================
+# 文档生成
+# ===========================================
+
+# 自动生成的文档
+docs/api/
+docs/generated/
+
+# ===========================================
+# 脚本和工具
+# ===========================================
+
+# 脚本临时文件
+scripts/temp/
+scripts/output/
+
+# ===========================================
+# 特定于框架的文件
+# ===========================================
+
+# Next.js
+.next/
+out/
+
+# Vite
+dist-ssr/
+*.local
+
+# React
+.eslintcache
+
+# ===========================================
+# 云服务相关
+# ===========================================
+
+# Vercel
+.vercel
+
+# Netlify
+.netlify
+
+# ===========================================
+# 其他常见忽略
+# ===========================================
+
+# 锁文件冲突
+package-lock.json
+yarn.lock
+
+# 依赖分析
+dependency-cruiser-report.html
+
+# 性能测试
+lighthouse-report.html
+
+# 安全扫描
+security-audit.json
+
+# ===========================================
+# 原有配置保留
+# ===========================================
+
+# 保留原有的重要配置
+.react-router/
+backup/
+logs/*.log
+**/drizzle/**

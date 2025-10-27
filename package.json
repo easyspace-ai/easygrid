@@ -1,0 +1,43 @@
+{
+  "name": "easygrid",
+  "version": "0.1.0",
+  "private": true,
+  "description": "EasyGrid - Next-generation collaborative database platform",
+  "author": "EasyGrid Team",
+  "license": "MIT",
+  "engines": {
+    "node": ">=18.0.0",
+    "pnpm": ">=8.0.0"
+  },
+  "packageManager": "pnpm@10.17.0",
+  "scripts": {
+    "dev": "turbo run dev",
+    "build": "turbo run build",
+    "test": "turbo run test",
+    "lint": "turbo run lint",
+    "lint:fix": "turbo run lint:fix",
+    "format": "turbo run format",
+    "format:check": "turbo run format:check",
+    "check-types": "turbo run typecheck",
+    "clean": "turbo run clean",
+    "clean:all": "rm -rf node_modules packages/*/node_modules apps/*/node_modules .turbo",
+    "changeset": "changeset",
+    "version-packages": "changeset version",
+    "release": "turbo run build --filter=!@easygrid/aitable && changeset publish"
+  },
+  "devDependencies": {
+    "@changesets/cli": "^2.27.1",
+    "@types/node": "^20.9.0",
+    "eslint": "^8.57.0",
+    "prettier": "^3.2.5",
+    "turbo": "^1.12.4",
+    "typescript": "^5.5.4"
+  },
+  "workspaces": [
+    "packages/*",
+    "apps/*"
+  ],
+  "dependencies": {
+    "puppeteer": "24.26.1"
+  }
+}

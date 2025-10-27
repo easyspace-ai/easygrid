@@ -1,0 +1,93 @@
+/**
+ * Formula Field Model
+ * Computed formula fields
+ */
+
+import { Field } from './Field';
+
+export interface IFormulaFieldOptions {
+  expression?: string;
+  formatting?: {
+    type?: 'text' | 'number' | 'date' | 'boolean';
+    precision?: number;
+    dateFormat?: string;
+  };
+}
+
+export class FormulaField extends Field {
+
+  constructor(config: any) {
+    super(config);
+    // Formula fields are always computed
+    this.isComputed = true;
+  }
+
+  validate(value: unknown): boolean {
+    // Formula fields are computed, so any value from the server is valid
+    return true;
+  }
+
+  format(value: unknown): string {
+    if (this.isEmpty(value)) {
+      return '';
+    }
+
+    const formatting = this.options.formatting;
+
+    switch (formatting?.type) {
+      case 'number':
+        if (typeof value === 'number') {
+          const precision = formatting.precision ?? 0;
+          return value.toFixed(precision);
+        }
+        return String(value);
+
+      case 'date':
+        if (value instanceof Date || typeof value === 'string') {
+          // Would use date formatting here
+          return String(value);
+        }
+        return String(value);
+
+      case 'boolean':
+        return value ? 'true' : 'false';
+
+      case 'text':
+      default:
+        return String(value);
+    }
+  }
+
+  getEmptyValue(): null {
+    return null;
+  }
+
+  toCellValue(value: unknown): any {
+    // Formula values come from the server
+    return value;
+  }
+
+  fromCellValue(cellValue: any): any {
+    if (cellValue === null || cellValue === undefined) {
+      return null;
+    }
+
+    return cellValue;
+  }
+
+  /**
+   * Get formula expression
+   */
+  getExpression(): string {
+    return ((this.options as any).expression) ?? '';
+  }
+
+  /**
+   * Check if formula is valid
+   */
+  hasValidExpression(): boolean {
+    return Boolean(((this.options as any).expression) && ((this.options as any).expression).trim().length > 0);
+  }
+}
+
+

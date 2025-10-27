@@ -1,0 +1,49 @@
+# 依赖
+node_modules/
+.pnpm-store/
+
+# 构建输出
+dist/
+build/
+.next/
+.turbo/
+
+# 缓存
+.cache/
+.parcel-cache/
+.eslintcache
+
+# 日志
+*.log
+logs/
+
+# 环境变量
+.env*
+
+# 数据库
+*.db
+*.sqlite
+
+# 临时文件
+*.tmp
+*.temp
+
+# 操作系统
+.DS_Store
+Thumbs.db
+
+# IDE
+.vscode/
+.idea/
+
+# 测试覆盖率
+coverage/
+
+# 包管理器锁文件
+package-lock.json
+yarn.lock
+bun.lockb
+
+# 其他
+*.min.js
+*.min.css

@@ -1,0 +1,328 @@
+/**
+ * @easyspace/aitable 组件库样式
+ * 
+ * 这个文件包含了所有组件需要的样式，包括：
+ * 1. Tailwind CSS 基础样式
+ * 2. 自定义设计系统样式
+ * 3. 组件特定的样式
+ * 
+ * 使用方法：
+ * import '@easyspace/aitable/dist/index.css'
+ */
+
+@import "tailwindcss";
+
+/* 基础样式重置 */
+@layer base {
+  * {
+    box-sizing: border-box;
+  }
+
+  /* 确保组件在任意环境中都有正确的字体 */
+  .luckdb-aitable {
+    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Roboto', 'Oxygen',
+      'Ubuntu', 'Cantarell', 'Fira Sans', 'Droid Sans', 'Helvetica Neue',
+      sans-serif;
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+  }
+}
+
+/* 组件样式 */
+@layer components {
+  /* 工具栏样式 */
+  .luckdb-toolbar {
+    @apply flex items-center p-2 bg-white border-b border-gray-200;
+    min-height: 3rem;
+  }
+
+  .luckdb-toolbar-button {
+    @apply inline-flex items-center justify-center px-3 py-2 rounded-md text-sm font-medium;
+    @apply bg-white border border-gray-200 text-gray-700;
+    @apply hover:bg-gray-50 hover:border-gray-300;
+    @apply focus:outline-none focus:ring-2 focus:ring-blue-500;
+    @apply transition-all duration-200;
+  }
+
+  .luckdb-toolbar-button-primary {
+    @apply bg-blue-600 border-blue-600 text-white;
+    @apply hover:bg-blue-700 hover:border-blue-700;
+    @apply shadow-sm hover:shadow-md;
+  }
+
+  .luckdb-toolbar-dropdown {
+    @apply inline-flex items-center justify-center h-8 px-3 rounded-md text-sm font-medium;
+    @apply bg-white border border-gray-200 text-gray-700;
+    @apply hover:bg-gray-50 hover:border-gray-300;
+    @apply focus:outline-none focus:ring-2 focus:ring-blue-500;
+    @apply transition-all duration-200;
+    appearance: none;
+    background-image: url("data:image/svg+xml,%3csvg xmlns='http://www.w3.org/2000/svg' fill='none' viewBox='0 0 20 20'%3e%3cpath stroke='%236b7280' stroke-linecap='round' stroke-linejoin='round' stroke-width='1.5' d='m6 8 4 4 4-4'/%3e%3c/svg%3e");
+    background-position: right 0.5rem center;
+    background-repeat: no-repeat;
+    background-size: 1.5em 1.5em;
+    padding-right: 2.5rem;
+  }
+
+  /* 网格样式 */
+  .luckdb-grid {
+    @apply w-full h-full bg-white border border-gray-200 rounded-lg overflow-hidden;
+  }
+
+  .luckdb-grid-header {
+    @apply bg-gray-50 border-b border-gray-200;
+  }
+
+  .luckdb-grid-cell {
+    @apply border-r border-b border-gray-200 bg-white;
+  }
+
+  .luckdb-grid-cell-hover {
+    @apply hover:bg-gray-50 transition-colors duration-150;
+  }
+
+  .luckdb-grid-cell-selected {
+    @apply bg-blue-50 border-blue-200 ring-1 ring-blue-500;
+  }
+
+  /* 行样式 */
+  .luckdb-row {
+    @apply border-b border-gray-100 hover:bg-gray-50 transition-colors duration-150;
+  }
+
+  .luckdb-row-selected {
+    @apply bg-blue-50 border-blue-200;
+  }
+
+  .luckdb-row-hover {
+    @apply bg-gray-50;
+  }
+
+  /* 字段配置面板 */
+  .luckdb-field-config {
+    @apply bg-white border border-gray-200 rounded-lg shadow-lg p-4;
+  }
+
+  .luckdb-field-config-header {
+    @apply flex items-center justify-between mb-4 pb-2 border-b border-gray-200;
+  }
+
+  .luckdb-field-config-content {
+    @apply flex flex-col;
+  }
+
+  /* 对话框样式 */
+  .luckdb-dialog {
+    @apply fixed inset-0 z-50 flex items-center justify-center;
+    @apply bg-black/50 backdrop-blur-sm;
+  }
+
+  .luckdb-dialog-content {
+    @apply bg-white rounded-lg shadow-xl max-w-md w-full mx-4 p-6;
+    @apply animate-pulse;
+  }
+
+  .luckdb-dialog-header {
+    @apply flex items-center justify-between mb-4;
+  }
+
+  .luckdb-dialog-title {
+    @apply text-lg font-semibold text-gray-900;
+  }
+
+  .luckdb-dialog-close {
+    @apply p-1 hover:bg-gray-100 rounded-md transition-colors duration-150;
+  }
+
+  /* 表单样式 */
+  .luckdb-form-group {
+    @apply flex flex-col;
+  }
+
+  .luckdb-form-label {
+    @apply block text-sm font-medium text-gray-700;
+  }
+
+  .luckdb-form-input {
+    @apply w-full px-3 py-2 border border-gray-300 rounded-md;
+    @apply focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent;
+    @apply transition-colors duration-150;
+  }
+
+  .luckdb-form-select {
+    @apply w-full px-3 py-2 border border-gray-300 rounded-md;
+    @apply focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent;
+    @apply transition-colors duration-150;
+    appearance: none;
+    background-image: url("data:image/svg+xml,%3csvg xmlns='http://www.w3.org/2000/svg' fill='none' viewBox='0 0 20 20'%3e%3cpath stroke='%236b7280' stroke-linecap='round' stroke-linejoin='round' stroke-width='1.5' d='m6 8 4 4 4-4'/%3e%3c/svg%3e");
+    background-position: right 0.5rem center;
+    background-repeat: no-repeat;
+    background-size: 1.5em 1.5em;
+    padding-right: 2.5rem;
+  }
+
+  /* 按钮样式 */
+  .luckdb-button {
+    @apply inline-flex items-center justify-center px-4 py-2 rounded-md text-sm font-medium;
+    @apply transition-all duration-200 ease-out;
+    @apply focus:outline-none focus:ring-2 focus:ring-blue-500;
+  }
+
+  .luckdb-button-primary {
+    @apply bg-blue-600 text-white hover:bg-blue-700 focus:ring-blue-500;
+    @apply shadow-sm hover:shadow-md;
+  }
+
+  .luckdb-button-secondary {
+    @apply bg-white text-gray-700 border border-gray-300 hover:bg-gray-50 focus:ring-blue-500;
+  }
+
+  .luckdb-button-ghost {
+    @apply text-gray-700 hover:bg-gray-100 focus:ring-blue-500;
+  }
+
+  .luckdb-button-danger {
+    @apply bg-red-600 text-white hover:bg-red-700 focus:ring-red-500;
+    @apply shadow-sm hover:shadow-md;
+  }
+
+  /* 状态样式 */
+  .luckdb-loading {
+    @apply animate-spin rounded-full h-4 w-4 border-2 border-gray-300 border-t-blue-600;
+  }
+
+  .luckdb-error {
+    @apply bg-red-50 border border-red-200 text-red-800 px-4 py-3 rounded-md;
+  }
+
+  .luckdb-success {
+    @apply bg-green-50 border border-green-200 text-green-800 px-4 py-3 rounded-md;
+  }
+
+  .luckdb-warning {
+    @apply bg-yellow-50 border border-yellow-200 text-yellow-800 px-4 py-3 rounded-md;
+  }
+
+  /* 工具提示 */
+  .luckdb-tooltip {
+    @apply absolute z-50 px-2 py-1 text-xs text-white bg-gray-900 rounded shadow-lg;
+    @apply opacity-0 pointer-events-none transition-opacity duration-200;
+  }
+
+  .luckdb-tooltip-visible {
+    @apply opacity-100;
+  }
+
+  /* 下拉菜单 */
+  .luckdb-dropdown {
+    @apply absolute z-50 mt-1 w-full bg-white border border-gray-200 rounded-md shadow-lg;
+    @apply opacity-0 pointer-events-none transition-opacity duration-200;
+  }
+
+  .luckdb-dropdown-visible {
+    @apply opacity-100 pointer-events-auto;
+  }
+
+  .luckdb-dropdown-item {
+    @apply px-4 py-2 text-sm text-gray-700 hover:bg-gray-100 cursor-pointer;
+    @apply transition-colors duration-150;
+  }
+
+  .luckdb-dropdown-item-selected {
+    @apply bg-blue-50 text-blue-700;
+  }
+}
+
+/* 工具类 */
+@layer utilities {
+  /* 滚动条样式 */
+  .luckdb-scrollbar {
+    scrollbar-width: thin;
+    scrollbar-color: #cbd5e0 #f7fafc;
+  }
+
+  .luckdb-scrollbar::-webkit-scrollbar {
+    width: 6px;
+    height: 6px;
+  }
+
+  .luckdb-scrollbar::-webkit-scrollbar-track {
+    background: #f7fafc;
+  }
+
+  .luckdb-scrollbar::-webkit-scrollbar-thumb {
+    background: #cbd5e0;
+    border-radius: 3px;
+  }
+
+  .luckdb-scrollbar::-webkit-scrollbar-thumb:hover {
+    background: #a0aec0;
+  }
+
+  /* 文本选择样式 */
+  .luckdb-select-none {
+    user-select: none;
+    -webkit-user-select: none;
+    -moz-user-select: none;
+    -ms-user-select: none;
+  }
+
+  /* 禁用状态 */
+  .luckdb-disabled {
+    @apply opacity-50 cursor-not-allowed pointer-events-none;
+  }
+
+  /* 响应式隐藏 */
+  .luckdb-mobile-only {
+    @apply block sm:hidden;
+  }
+
+  .luckdb-desktop-only {
+    @apply hidden sm:block;
+  }
+}
+
+/* 动画 */
+@keyframes luckdb-fade-in {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
+@keyframes luckdb-slide-in {
+  from {
+    transform: translateY(-10px);
+    opacity: 0;
+  }
+  to {
+    transform: translateY(0);
+    opacity: 1;
+  }
+}
+
+@keyframes luckdb-scale-in {
+  from {
+    transform: scale(0.95);
+    opacity: 0;
+  }
+  to {
+    transform: scale(1);
+    opacity: 1;
+  }
+}
+
+/* 打印样式 */
+@media print {
+  .luckdb-toolbar,
+  .luckdb-field-config {
+    display: none !important;
+  }
+  
+  .luckdb-grid {
+    border: 1px solid #000 !important;
+    box-shadow: none !important;
+  }
+}

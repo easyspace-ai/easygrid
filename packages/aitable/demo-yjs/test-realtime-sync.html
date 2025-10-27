@@ -1,0 +1,212 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>实时同步测试</title>
+    <style>
+        body { font-family: Arial, sans-serif; margin: 20px; }
+        .container { max-width: 800px; margin: 0 auto; }
+        .status { padding: 10px; margin: 10px 0; border-radius: 5px; }
+        .success { background-color: #d4edda; color: #155724; border: 1px solid #c3e6cb; }
+        .error { background-color: #f8d7da; color: #721c24; border: 1px solid #f5c6cb; }
+        .info { background-color: #d1ecf1; color: #0c5460; border: 1px solid #bee5eb; }
+        .log { background-color: #f8f9fa; border: 1px solid #dee2e6; padding: 10px; margin: 10px 0; border-radius: 5px; font-family: monospace; font-size: 12px; max-height: 300px; overflow-y: auto; }
+        button { padding: 10px 20px; margin: 5px; background-color: #007bff; color: white; border: none; border-radius: 5px; cursor: pointer; }
+        button:hover { background-color: #0056b3; }
+        button:disabled { background-color: #6c757d; cursor: not-allowed; }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>实时同步测试</h1>
+        
+        <div id="status" class="status info">
+            正在初始化...
+        </div>
+        
+        <div>
+            <button id="loginBtn" onclick="login()">登录</button>
+            <button id="testBtn" onclick="testRealtimeSync()" disabled>测试实时同步</button>
+            <button id="clearBtn" onclick="clearLog()">清除日志</button>
+        </div>
+        
+        <div id="log" class="log"></div>
+    </div>
+
+    <script>
+        let accessToken = null;
+        let wsConnection = null;
+        
+        function log(message) {
+            const logDiv = document.getElementById('log');
+            const timestamp = new Date().toISOString();
+            logDiv.innerHTML += `[${timestamp}] ${message}\n`;
+            logDiv.scrollTop = logDiv.scrollHeight;
+            console.log(message);
+        }
+        
+        function updateStatus(message, type = 'info') {
+            const statusDiv = document.getElementById('status');
+            statusDiv.textContent = message;
+            statusDiv.className = `status ${type}`;
+        }
+        
+        function clearLog() {
+            document.getElementById('log').innerHTML = '';
+        }
+        
+        async function login() {
+            try {
+                updateStatus('正在登录...', 'info');
+                log('开始登录...');
+                
+                const response = await fetch('http://localhost:2345/api/v1/auth/login', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                    },
+                    body: JSON.stringify({
+                        email: 'test@example.com',
+                        password: 'password123'
+                    })
+                });
+                
+                const data = await response.json();
+                log(`登录响应: ${JSON.stringify(data)}`);
+                
+                if (data.code === 200000 && data.data) {
+                    accessToken = data.data.accessToken;
+                    localStorage.setItem('accessToken', accessToken);
+                    updateStatus('登录成功！', 'success');
+                    log('✅ 登录成功，获得访问令牌');
+                    
+                    document.getElementById('loginBtn').disabled = true;
+                    document.getElementById('testBtn').disabled = false;
+                    
+                    // 测试 WebSocket 连接
+                    testWebSocketConnection();
+                } else {
+                    updateStatus('登录失败', 'error');
+                    log(`❌ 登录失败: ${data.message}`);
+                }
+            } catch (error) {
+                updateStatus('登录错误', 'error');
+                log(`❌ 登录错误: ${error.message}`);
+            }
+        }
+        
+        function testWebSocketConnection() {
+            if (!accessToken) {
+                log('❌ 没有访问令牌，无法测试 WebSocket 连接');
+                return;
+            }
+            
+            const wsUrl = `ws://localhost:2345/socket?token=${accessToken}`;
+            log(`尝试连接 WebSocket: ${wsUrl}`);
+            
+            try {
+                wsConnection = new WebSocket(wsUrl);
+                
+                wsConnection.onopen = function() {
+                    log('✅ WebSocket 连接成功！');
+                    updateStatus('WebSocket 连接成功', 'success');
+                };
+                
+                wsConnection.onmessage = function(event) {
+                    log(`📨 收到 WebSocket 消息: ${event.data}`);
+                };
+                
+                wsConnection.onerror = function(error) {
+                    log(`❌ WebSocket 错误: ${error}`);
+                    updateStatus('WebSocket 连接错误', 'error');
+                };
+                
+                wsConnection.onclose = function(event) {
+                    log(`🔌 WebSocket 连接关闭: ${event.code} - ${event.reason}`);
+                    updateStatus('WebSocket 连接关闭', 'info');
+                };
+                
+            } catch (error) {
+                log(`❌ WebSocket 连接失败: ${error.message}`);
+                updateStatus('WebSocket 连接失败', 'error');
+            }
+        }
+        
+        async function testRealtimeSync() {
+            if (!accessToken) {
+                log('❌ 请先登录');
+                return;
+            }
+            
+            try {
+                updateStatus('正在测试实时同步...', 'info');
+                log('开始测试实时同步...');
+                
+                // 获取表格信息
+                const tableResponse = await fetch('http://localhost:2345/api/v1/tables', {
+                    headers: {
+                        'Authorization': `Bearer ${accessToken}`
+                    }
+                });
+                
+                const tableData = await tableResponse.json();
+                log(`表格列表: ${JSON.stringify(tableData)}`);
+                
+                if (tableData.data && tableData.data.length > 0) {
+                    const tableId = tableData.data[0].id;
+                    log(`使用表格 ID: ${tableId}`);
+                    
+                    // 创建测试记录
+                    const createResponse = await fetch(`http://localhost:2345/api/v1/tables/${tableId}/records`, {
+                        method: 'POST',
+                        headers: {
+                            'Content-Type': 'application/json',
+                            'Authorization': `Bearer ${accessToken}`
+                        },
+                        body: JSON.stringify({
+                            data: {
+                                name: `测试记录_${Date.now()}`,
+                                value: Math.floor(Math.random() * 1000)
+                            }
+                        })
+                    });
+                    
+                    const createData = await createResponse.json();
+                    log(`创建记录响应: ${JSON.stringify(createData)}`);
+                    
+                    if (createData.code === 200000) {
+                        updateStatus('实时同步测试完成！请检查另一个标签页是否收到更新', 'success');
+                        log('✅ 记录创建成功，请检查另一个标签页是否实时更新');
+                    } else {
+                        updateStatus('记录创建失败', 'error');
+                        log(`❌ 记录创建失败: ${createData.message}`);
+                    }
+                } else {
+                    updateStatus('没有找到表格', 'error');
+                    log('❌ 没有找到表格');
+                }
+                
+            } catch (error) {
+                updateStatus('测试失败', 'error');
+                log(`❌ 测试失败: ${error.message}`);
+            }
+        }
+        
+        // 页面加载时检查是否已登录
+        window.onload = function() {
+            const savedToken = localStorage.getItem('accessToken');
+            if (savedToken) {
+                accessToken = savedToken;
+                updateStatus('已找到保存的访问令牌', 'info');
+                document.getElementById('loginBtn').disabled = true;
+                document.getElementById('testBtn').disabled = false;
+                testWebSocketConnection();
+            } else {
+                updateStatus('请先登录', 'info');
+            }
+        };
+    </script>
+</body>
+</html>
+

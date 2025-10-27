@@ -1,0 +1,118 @@
+{
+  "name": "@easygrid/sdk",
+  "version": "0.1.0",
+  "description": "TypeScript SDK for EasyGrid - A collaborative database platform",
+  "main": "dist/index.js",
+  "module": "dist/index.js",
+  "types": "dist/index.d.ts",
+  "type": "module",
+  "exports": {
+    ".": {
+      "import": "./dist/index.js",
+      "require": "./dist/index.js",
+      "types": "./dist/index.d.ts"
+    }
+  },
+  "files": [
+    "dist/**/*",
+    "README.md",
+    "LICENSE"
+  ],
+  "scripts": {
+    "build": "tsc",
+    "dev": "tsc --build --watch",
+    "prepublishOnly": "tsc",
+    "prepack": "tsc",
+    "test": "jest",
+    "test:watch": "jest --watch",
+    "lint": "eslint . --ext .ts,.tsx,.js,.jsx,.cjs,.mjs --cache",
+    "lint:fix": "eslint . --ext .ts,.tsx,.js,.jsx,.cjs,.mjs --fix",
+    "format": "prettier --write \"src/**/*.{ts,tsx,js,jsx,json,md}\"",
+    "format:check": "prettier --check \"src/**/*.{ts,tsx,js,jsx,json,md}\"",
+    "typecheck": "tsc --noEmit",
+    "clean": "rimraf ./dist ./coverage ./tsconfig.tsbuildinfo",
+    "docs": "typedoc src/index.ts",
+    "basic": "ts-node --transpile-only examples/basic-usage.ts",
+    "advanced": "ts-node --transpile-only examples/advanced-queries.ts",
+    "test:setup": "tsx examples/00-setup-test-user.ts",
+    "test:auth": "tsx examples/01-auth-test.ts",
+    "test:validation": "tsx examples/01-sdk-basic-validation.ts",
+    "test:formula": "tsx examples/02-formula-field-validation.ts",
+    "test:space": "tsx examples/02-space-crud.ts",
+    "test:record": "tsx examples/04-record-operations.ts",
+    "test:view": "tsx examples/05-view-management.ts",
+    "test:performance": "tsx examples/97-performance-tests.ts",
+    "test:destructive": "tsx examples/98-destructive-tests.ts",
+    "test:comprehensive": "tsx examples/99-comprehensive-test.ts",
+    "test:yjs-realtime": "tsx examples/yjs-realtime-test.ts",
+    "test:yjs-simple": "tsx examples/yjs-simple-test.ts",
+    "test:yjs-table": "tsx examples/yjs-table-operations.ts",
+    "test:yjs-records": "tsx examples/yjs-record-operations.ts",
+    "test:yjs-quick": "tsx examples/quick-yjs-test.ts",
+    "test:yjs-nodejs": "tsx examples/yjs-nodejs-test.ts",
+    "test:yjs-discover": "tsx examples/yjs-discover-test.ts",
+    "setup:env": "tsx examples/setup-env.ts",
+    "test:yjs-all": "bun test:yjs-simple && bun test:yjs-table && bun test:yjs-records",
+    "test:all": "bun test:setup && bun test:auth && bun test:space && bun test:record && bun test:view && bun test:comprehensive && bun test:destructive && bun test:performance",
+    "test:realtime-sync": "tsx examples/realtime-sync-test.ts",
+    "test:client-a": "tsx examples/client-a-listener.ts",
+    "test:client-b": "tsx examples/client-b-operator.ts",
+    "test:realtime-simple": "tsx examples/realtime-simple-usage.ts"
+  },
+  "keywords": [
+    "easyspace",
+    "database",
+    "collaboration",
+    "airtable",
+    "sdk",
+    "typescript"
+  ],
+  "author": "EasySpace Team",
+  "license": "MIT",
+  "devDependencies": {
+    "@types/jest": "^29.5.12",
+    "@types/node": "^24.2.0",
+    "dotenv": "^16.4.5",
+    "eslint": "^8.57.0",
+    "jest": "^29.7.0",
+    "prettier": "^3.2.5",
+    "rimraf": "^5.0.5",
+    "ts-jest": "^29.1.0",
+    "ts-node": "^10.9.2",
+    "tsx": "^4.7.0",
+    "typedoc": "^0.26.5",
+    "typescript": "^5.5.4"
+  },
+  "dependencies": {
+    "@types/ws": "^8.18.1",
+    "axios": "^1.12.2",
+    "react-use-websocket": "^4.13.0",
+    "reconnecting-websocket": "^4.4.0",
+    "ws": "^8.18.3"
+  },
+  "peerDependencies": {
+    "typescript": "^5.5.4"
+  },
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/your-username/easygrid.git",
+    "directory": "packages/sdk"
+  },
+  "bugs": {
+    "url": "https://github.com/your-username/easygrid/issues"
+  },
+  "homepage": "https://github.com/your-username/easygrid/tree/main/packages/sdk#readme",
+  "eslintConfig": {
+    "root": true,
+    "extends": [
+      "eslint:recommended",
+      "@typescript-eslint/recommended"
+    ],
+    "parser": "@typescript-eslint/parser",
+    "plugins": ["@typescript-eslint"],
+    "env": {
+      "node": true,
+      "es2022": true
+    }
+  }
+}
