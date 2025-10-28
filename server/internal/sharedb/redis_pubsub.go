@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"sync"
 
+	"github.com/easyspace-ai/luckdb/server/pkg/sharedb/opbuilder"
 	"github.com/redis/go-redis/v9"
 	"go.uber.org/zap"
 )
@@ -13,7 +14,7 @@ import (
 type RedisPubSub struct {
 	client       *redis.Client
 	prefix       string
-	listeners    sync.Map // channel -> []func(*Operation)
+	listeners    sync.Map // channel -> []func(*opbuilder.Operation)
 	subscriptions map[string]context.CancelFunc // channel -> cancelFunc
 	logger       *zap.Logger
 	mu           sync.RWMutex
@@ -51,7 +52,7 @@ func NewRedisPubSub(redisURI string, logger *zap.Logger) (PubSub, error) {
 }
 
 // Publish 发布消息
-func (p *RedisPubSub) Publish(ctx context.Context, channels []string, op *Operation) error {
+func (p *RedisPubSub) Publish(ctx context.Context, channels []string, op *opbuilder.Operation) error {
 	p.mu.RLock()
 	defer p.mu.RUnlock()
 
@@ -80,7 +81,7 @@ func (p *RedisPubSub) Publish(ctx context.Context, channels []string, op *Operat
 }
 
 // Subscribe 订阅频道
-func (p *RedisPubSub) Subscribe(ctx context.Context, channel string, handler func(*Operation)) error {
+func (p *RedisPubSub) Subscribe(ctx context.Context, channel string, handler func(*opbuilder.Operation)) error {
 	p.mu.Lock()
 	defer p.mu.Unlock()
 
@@ -122,7 +123,7 @@ func (p *RedisPubSub) Subscribe(ctx context.Context, channel string, handler fun
 				}
 
 				// 解析操作
-				var op Operation
+				var op opbuilder.Operation
 				if err := json.Unmarshal([]byte(msg.Payload), &op); err != nil {
 					p.logger.Error("Failed to unmarshal operation",
 						zap.Error(err),

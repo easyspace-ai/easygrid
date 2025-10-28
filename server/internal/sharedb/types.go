@@ -2,6 +2,8 @@ package sharedb
 
 import (
 	"time"
+	
+	"github.com/easyspace-ai/luckdb/server/pkg/errors"
 )
 
 // OpType 操作类型
@@ -70,9 +72,13 @@ type Message struct {
 	Op         []OTOperation  `json:"op,omitempty"`
 	Create     *CreateData   `json:"create,omitempty"`
 	Data       interface{}   `json:"data,omitempty"`
-	Error      *Error        `json:"error,omitempty"`
+	Error      *errors.ShareDBError `json:"error,omitempty"`
 	// Presence 相关
 	Presence map[string]interface{} `json:"presence,omitempty"`
+	// 握手相关字段
+	Protocol int         `json:"protocol,omitempty"`
+	Type     string      `json:"type,omitempty"`
+	ID       interface{} `json:"id,omitempty"`
 }
 
 // Operation ShareDB 操作（通用操作类型）
@@ -96,10 +102,11 @@ type Error struct {
 
 // Connection 连接信息
 type Connection struct {
-	ID       string
-	UserID   string
-	LastSeen time.Time
-	IsActive bool
+	ID        string
+	UserID    string
+	LastSeen  time.Time
+	IsActive  bool
+	CreatedAt time.Time
 }
 
 // PresenceData 在线状态数据

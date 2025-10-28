@@ -2,6 +2,7 @@ package http
 
 import (
 	"net/http"
+	"time"
 
 	"github.com/easyspace-ai/luckdb/server/internal/sharedb"
 	"github.com/gin-gonic/gin"
@@ -62,5 +63,23 @@ func (h *ShareDBHandler) GetConnections(c *gin.Context) {
 	// 这里可以添加获取连接详情的逻辑
 	c.JSON(http.StatusOK, gin.H{
 		"connections": []interface{}{},
+	})
+}
+
+// ForceCleanupConnections 强制清理所有连接（开发环境使用）
+func (h *ShareDBHandler) ForceCleanupConnections(c *gin.Context) {
+	if h.service == nil {
+		c.JSON(http.StatusServiceUnavailable, gin.H{
+			"error": "ShareDB service not available",
+		})
+		return
+	}
+
+	// 强制清理所有连接
+	h.service.ForceCleanupAllConnections()
+	
+	c.JSON(http.StatusOK, gin.H{
+		"message": "All connections have been cleaned up",
+		"timestamp": time.Now().Format(time.RFC3339),
 	})
 }

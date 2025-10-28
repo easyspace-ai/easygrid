@@ -1,75 +1,88 @@
 /**
- * ShareDB 连接管理器
- * 负责 WebSocket 连接、消息路由和状态管理
+ * ShareDBConnection - ShareDB 连接管理器
+ * 参考 Teable 的 Connection 实现
  */
 
-import ReconnectingWebSocket from 'reconnecting-websocket';
-import type { 
-  ShareDBConnectionConfig, 
-  ShareDBConnectionState, 
-  ShareDBMessage,
-  DocumentEventHandler,
-  OperationEventHandler
-} from '../../types/sharedb.js';
-import type { EventBus, ConnectionEvent, ErrorEvent } from '../../types/events.js';
+import ReconnectingWebSocket from 'reconnecting-websocket'
+import { ShareDBDoc, ShareDBMessage, OTOperation } from './document.js'
+import { SDKErrorHandler } from '../error-handler.js'
 
+export interface ShareDBConnectionConfig {
+  wsUrl: string
+  accessToken?: string
+  debug?: boolean
+  reconnect?: {
+    maxRetries?: number
+    retryDelay?: number
+    exponentialBackoff?: boolean
+  }
+  heartbeat?: {
+    interval?: number
+    timeout?: number
+  }
+}
+
+export type ConnectionState = 'disconnected' | 'connecting' | 'connected' | 'reconnecting' | 'error'
+
+/**
+ * ShareDB 连接管理器
+ * 负责 WebSocket 连接、消息分发、文档缓存
+ */
 export class ShareDBConnection {
-  private socket: ReconnectingWebSocket | null = null;
-  private config: ShareDBConnectionConfig;
-  private state: ShareDBConnectionState = 'disconnected';
-  private eventBus: EventBus;
-  private messageHandlers: Map<string, (message: ShareDBMessage) => void> = new Map();
-  private heartbeatInterval: NodeJS.Timeout | null = null;
-  private reconnectAttempts = 0;
-  private maxReconnectAttempts: number;
+  private config: ShareDBConnectionConfig
+  private socket: ReconnectingWebSocket | null = null
+  private state: ConnectionState = 'disconnected'
+  private docs: Map<string, ShareDBDoc> = new Map()
+  private messageId = 0
+  private heartbeatTimer?: NodeJS.Timeout
+  private lastConnectedAt?: Date
+  private connectionId?: string
 
-  constructor(config: ShareDBConnectionConfig, eventBus: EventBus) {
-    this.config = config;
-    this.eventBus = eventBus;
-    this.maxReconnectAttempts = config.maxReconnectAttempts || 10;
+  constructor(config: ShareDBConnectionConfig) {
+    this.config = this.normalizeConfig(config)
   }
 
   /**
-   * 连接到 ShareDB 服务器
+   * 连接 ShareDB
    */
   async connect(): Promise<void> {
     if (this.state === 'connected' || this.state === 'connecting') {
-      return;
+      return
     }
 
-    this.setState('connecting');
+    this.setState('connecting')
 
     try {
-      // 创建 WebSocket 连接
-      this.socket = new ReconnectingWebSocket(this.config.wsUrl, [], {
-        maxReconnectionAttempts: this.maxReconnectAttempts,
-        reconnectionDelayGrowFactor: 1.5,
-        minReconnectionDelay: 1000,
-        maxReconnectionDelay: 5000,
-        connectionTimeout: 10000,
-      } as any);
+      // 构建 WebSocket URL，添加 token 参数
+      let wsUrl = this.config.wsUrl
+      if (this.config.accessToken) {
+        const url = new URL(wsUrl)
+        url.searchParams.set('token', this.config.accessToken)
+        wsUrl = url.toString()
+      }
 
-      this.setupEventHandlers();
-      this.startHeartbeat();
+      // 创建 WebSocket 连接
+      this.socket = new ReconnectingWebSocket(wsUrl, [], {
+        maxReconnectionAttempts: this.config.reconnect?.maxRetries || 10,
+        reconnectionDelayGrowFactor: this.config.reconnect?.exponentialBackoff ? 1.5 : 1,
+        minReconnectionDelay: this.config.reconnect?.retryDelay || 1000,
+        maxReconnectionDelay: 5000,
+        debug: this.config.debug
+      } as any)
+
+      // 绑定事件处理器
+      this.socket.addEventListener('open', this.handleOpen.bind(this))
+      this.socket.addEventListener('message', this.handleMessage.bind(this))
+      this.socket.addEventListener('close', this.handleClose.bind(this))
+      this.socket.addEventListener('error', this.handleError.bind(this))
 
       // 等待连接建立
-      await this.waitForConnection();
-      
-      // 发送握手消息
-      await this.sendHandshake();
-
-      this.setState('connected');
-      this.reconnectAttempts = 0;
+      await this.waitForConnection()
 
     } catch (error) {
-      this.setState('error');
-      this.eventBus.emit('error', {
-        type: 'error',
-        timestamp: Date.now(),
-        error: error as Error,
-        context: { action: 'connect' }
-      } as ErrorEvent);
-      throw error;
+      this.setState('error')
+      const sdkError = SDKErrorHandler.handleConnectionError(error)
+      throw sdkError
     }
   }
 
@@ -77,251 +90,373 @@ export class ShareDBConnection {
    * 断开连接
    */
   disconnect(): void {
-    this.stopHeartbeat();
-    
     if (this.socket) {
-      this.socket.close();
-      this.socket = null;
+      this.socket.close()
+      this.socket = null
     }
+    
+    this.setState('disconnected')
+    this.clearHeartbeat()
+    this.docs.clear()
+  }
 
-    this.setState('disconnected');
-    this.messageHandlers.clear();
+  /**
+   * 获取文档（自动创建）
+   */
+  get(collection: string, docId: string): ShareDBDoc {
+    const key = `${collection}:${docId}`
+    
+    if (!this.docs.has(key)) {
+      const doc = new ShareDBDoc(this, collection, docId)
+      this.docs.set(key, doc)
+    }
+    
+    return this.docs.get(key)!
   }
 
   /**
    * 发送消息
    */
-  send(message: ShareDBMessage): void {
-    if (!this.socket || (this.state !== 'connected' && this.state !== 'connecting')) {
-      throw new Error('ShareDB connection not established');
+  sendMessage(message: ShareDBMessage): void {
+    if (!this.isConnected()) {
+      throw new Error('ShareDB 连接未建立')
     }
 
-    try {
-      this.socket.send(JSON.stringify(message));
-      
-      if (this.config.debug) {
-        console.log('[ShareDB] 发送消息:', message);
+    const messageWithId = {
+      ...message,
+      id: ++this.messageId
+    }
+
+    this.socket!.send(JSON.stringify(messageWithId))
+    
+    if (this.config.debug) {
+      console.log('📤 ShareDB 发送消息:', messageWithId)
+    }
+  }
+
+  /**
+   * 订阅文档
+   */
+  subscribe(collection: string, docId: string, callback?: (snapshot: any) => void): () => void {
+    const message: ShareDBMessage = {
+      a: 's', // subscribe
+      c: collection,
+      d: docId
+    }
+    
+    this.sendMessage(message)
+    
+    // 如果有回调函数，监听消息
+    if (callback) {
+      const handler = (event: MessageEvent) => {
+        try {
+          const msg: ShareDBMessage = JSON.parse(event.data)
+          if (msg.c === collection && msg.d === docId) {
+            if (msg.a === 's' && msg.data) {
+              // 订阅确认，包含初始数据
+              callback({
+                v: msg.v || 0,
+                data: msg.data
+              })
+            } else if (msg.a === 'op' && msg.op) {
+              // 操作更新，需要重新获取数据
+              this.fetch(collection, docId).then(snapshot => {
+                callback(snapshot)
+              }).catch(error => {
+                console.error('Error fetching updated document:', error)
+              })
+            }
+          }
+        } catch (error) {
+          console.error('Failed to parse ShareDB message:', error)
+        }
       }
-    } catch (error) {
-      this.eventBus.emit('error', {
-        type: 'error',
-        timestamp: Date.now(),
-        error: error as Error,
-        context: { action: 'send', message }
-      } as ErrorEvent);
-      throw error;
+      
+      this.socket!.addEventListener('message', handler)
+      
+      // 返回取消订阅函数
+      return () => {
+        this.socket!.removeEventListener('message', handler)
+        this.unsubscribe(collection, docId)
+      }
     }
+    
+    return () => this.unsubscribe(collection, docId)
   }
 
   /**
-   * 注册消息处理器
+   * 取消订阅文档
    */
-  registerMessageHandler(key: string, handler: (message: ShareDBMessage) => void): void {
-    this.messageHandlers.set(key, handler);
+  unsubscribe(collection: string, docId: string): void {
+    const message: ShareDBMessage = {
+      a: 'u', // unsubscribe
+      c: collection,
+      d: docId
+    }
+    
+    this.sendMessage(message)
   }
 
   /**
-   * 注销消息处理器
+   * 获取文档快照
    */
-  unregisterMessageHandler(key: string): void {
-    this.messageHandlers.delete(key);
+  async fetch(collection: string, docId: string): Promise<any> {
+    return new Promise((resolve, reject) => {
+      const message: ShareDBMessage = {
+        a: 'f', // fetch
+        c: collection,
+        d: docId
+      }
+
+      // 设置超时
+      const timeout = setTimeout(() => {
+        reject(new Error('获取文档超时'))
+      }, 10000)
+
+      // 监听响应
+      const handler = (event: MessageEvent) => {
+        try {
+          const msg: ShareDBMessage = JSON.parse(event.data)
+          if (msg.c === collection && msg.d === docId && msg.a === 'f') {
+            clearTimeout(timeout)
+            this.socket!.removeEventListener('message', handler)
+            
+            if (msg.error) {
+              reject(new Error(msg.error.message))
+            } else {
+              resolve(msg.data)
+            }
+          }
+        } catch (error) {
+          console.error('Failed to parse ShareDB message:', error)
+        }
+      }
+
+      this.socket!.addEventListener('message', handler)
+      this.sendMessage(message)
+    })
+  }
+
+  /**
+   * 提交操作
+   */
+  async submitOp(collection: string, docId: string, ops: OTOperation[]): Promise<void> {
+    if (!this.isConnected()) {
+      throw new Error('连接未建立')
+    }
+
+    const message: ShareDBMessage = {
+      a: 'op', // operation
+      c: collection,
+      d: docId,
+      op: ops
+    }
+
+    return new Promise((resolve, reject) => {
+      // 设置超时
+      const timeout = setTimeout(() => {
+        reject(new Error('提交操作超时'))
+      }, 10000)
+
+      // 监听响应
+      const handler = (event: MessageEvent) => {
+        try {
+          const msg: ShareDBMessage = JSON.parse(event.data)
+          if (msg.c === collection && msg.d === docId && msg.a === 'op') {
+            clearTimeout(timeout)
+            this.socket!.removeEventListener('message', handler)
+            
+            if (msg.error) {
+              reject(new Error(msg.error.message))
+            } else {
+              resolve()
+            }
+          }
+        } catch (error) {
+          console.error('Failed to parse ShareDB message:', error)
+        }
+      }
+
+      this.socket!.addEventListener('message', handler)
+      this.sendMessage(message)
+    })
+  }
+
+  /**
+   * 检查连接状态
+   */
+  isConnected(): boolean {
+    return this.state === 'connected' && this.socket?.readyState === WebSocket.OPEN
   }
 
   /**
    * 获取连接状态
    */
-  getState(): ShareDBConnectionState {
-    return this.state;
+  getState(): ConnectionState {
+    return this.state
   }
 
   /**
-   * 检查是否已连接
+   * 获取连接信息
    */
-  isConnected(): boolean {
-    return this.state === 'connected';
+  getConnectionInfo(): {
+    state: ConnectionState
+    lastConnectedAt?: Date
+    connectionId?: string
+    docCount: number
+  } {
+    return {
+      state: this.state,
+      lastConnectedAt: this.lastConnectedAt,
+      connectionId: this.connectionId,
+      docCount: this.docs.size
+    }
+  }
+
+  /**
+   * 处理连接打开
+   */
+  private handleOpen(): void {
+    this.setState('connected')
+    this.lastConnectedAt = new Date()
+    this.startHeartbeat()
+    
+    if (this.config.debug) {
+      console.log('✅ ShareDB 连接已建立')
+    }
+  }
+
+  /**
+   * 处理消息
+   */
+  private handleMessage(event: MessageEvent): void {
+    try {
+      const message: ShareDBMessage = JSON.parse(event.data)
+      
+      if (this.config.debug) {
+        console.log('📥 ShareDB 收到消息:', message)
+      }
+
+      // 分发消息到对应文档
+      if (message.c && message.d) {
+        const docKey = `${message.c}:${message.d}`
+        const doc = this.docs.get(docKey)
+        
+        if (doc) {
+          doc.handleMessage(message)
+        }
+      }
+
+      // 处理连接相关消息
+      if (message.a === 'c') { // connection
+        this.connectionId = message.data?.connectionId
+      }
+
+    } catch (error) {
+      console.error('❌ ShareDB 消息解析失败:', error)
+    }
+  }
+
+  /**
+   * 处理连接关闭
+   */
+  private handleClose(): void {
+    this.setState('disconnected')
+    this.clearHeartbeat()
+    
+    if (this.config.debug) {
+      console.log('❌ ShareDB 连接已断开')
+    }
+  }
+
+  /**
+   * 处理连接错误
+   */
+  private handleError(): void {
+    this.setState('error')
+    
+    const error = new Error('ShareDB 连接错误')
+    SDKErrorHandler.handleConnectionError(error)
+    
+    if (this.config.debug) {
+      console.error('❌ ShareDB 连接错误')
+    }
   }
 
   /**
    * 设置连接状态
    */
-  private setState(state: ShareDBConnectionState): void {
-    if (this.state !== state) {
-      this.state = state;
-      
-      this.eventBus.emit('connection', {
-        type: state,
-        timestamp: Date.now(),
-        state
-      } as ConnectionEvent);
-
-      if (this.config.debug) {
-        console.log('[ShareDB] 连接状态变更:', state);
-      }
-    }
-  }
-
-  /**
-   * 设置事件处理器
-   */
-  private setupEventHandlers(): void {
-    if (!this.socket) return;
-
-    this.socket.addEventListener('open', () => {
-      if (this.config.debug) {
-        console.log('[ShareDB] WebSocket 连接已建立');
-      }
-    });
-
-    this.socket.addEventListener('message', (event) => {
-      try {
-        // 检查消息是否为空
-        if (!event.data || event.data.trim() === '') {
-          if (this.config.debug) {
-            console.log('[ShareDB] 收到空消息，跳过');
-          }
-          return;
-        }
-
-        const message: ShareDBMessage = JSON.parse(event.data);
-        
-        if (this.config.debug) {
-          console.log('[ShareDB] 收到消息:', message);
-        }
-
-        // 发射原始消息事件
-        this.eventBus.emit('raw-message', {
-          type: 'receive',
-          timestamp: Date.now(),
-          message: message
-        });
-
-        // 分发消息给所有处理器
-        this.messageHandlers.forEach(handler => {
-          try {
-            handler(message);
-          } catch (error) {
-            console.error('[ShareDB] 消息处理器错误:', error);
-          }
-        });
-
-      } catch (error) {
-        console.error('[ShareDB] 消息解析错误:', error);
-        if (this.config.debug) {
-          console.log('[ShareDB] 原始消息数据:', event.data);
-        }
-        this.eventBus.emit('error', {
-          type: 'error',
-          timestamp: Date.now(),
-          error: error as Error,
-          context: { action: 'parseMessage', data: event.data }
-        } as ErrorEvent);
-      }
-    });
-
-    this.socket.addEventListener('close', (event) => {
-      if (this.config.debug) {
-        console.log('[ShareDB] WebSocket 连接已关闭:', event.code, event.reason);
-      }
-      
-      this.setState('disconnected');
-      this.stopHeartbeat();
-    });
-
-    this.socket.addEventListener('error', (event) => {
-      console.error('[ShareDB] WebSocket 错误:', event);
-      
-      this.setState('error');
-      this.eventBus.emit('error', {
-        type: 'error',
-        timestamp: Date.now(),
-        error: new Error('WebSocket connection error'),
-        context: { event }
-      } as ErrorEvent);
-    });
-  }
-
-  /**
-   * 等待连接建立
-   */
-  private waitForConnection(): Promise<void> {
-    return new Promise((resolve, reject) => {
-      if (!this.socket) {
-        reject(new Error('Socket not initialized'));
-        return;
-      }
-
-      const timeout = setTimeout(() => {
-        reject(new Error('Connection timeout'));
-      }, 10000);
-
-      const checkConnection = () => {
-        if (this.socket?.readyState === WebSocket.OPEN) {
-          clearTimeout(timeout);
-          resolve();
-        } else if (this.socket?.readyState === WebSocket.CLOSED) {
-          clearTimeout(timeout);
-          reject(new Error('Connection failed'));
-        } else {
-          setTimeout(checkConnection, 100);
-        }
-      };
-
-      checkConnection();
-    });
-  }
-
-  /**
-   * 发送握手消息
-   */
-  private async sendHandshake(): Promise<void> {
-    const handshakeMessage: ShareDBMessage = {
-      a: 'hs'
-    };
-
-    this.send(handshakeMessage);
-
-    // 等待握手响应
-    return new Promise((resolve, reject) => {
-      const timeout = setTimeout(() => {
-        reject(new Error('Handshake timeout'));
-      }, 5000);
-
-      const handler = (message: ShareDBMessage) => {
-        if (message.a === 'hs') {
-          clearTimeout(timeout);
-          this.unregisterMessageHandler('handshake');
-          resolve();
-        }
-      };
-
-      this.registerMessageHandler('handshake', handler);
-    });
+  private setState(state: ConnectionState): void {
+    this.state = state
   }
 
   /**
    * 开始心跳检测
    */
   private startHeartbeat(): void {
-    if (this.heartbeatInterval) {
-      clearInterval(this.heartbeatInterval);
-    }
+    if (!this.config.heartbeat?.interval) return
 
-    const interval = this.config.heartbeatInterval || 30000;
-    this.heartbeatInterval = setInterval(() => {
+    this.clearHeartbeat()
+    
+    this.heartbeatTimer = setInterval(() => {
       if (this.isConnected()) {
-        // 发送 ping 消息
-        this.send({ a: 'hs' });
+        this.sendMessage({ a: 'ping' })
       }
-    }, interval);
+    }, this.config.heartbeat.interval)
   }
 
   /**
-   * 停止心跳检测
+   * 清除心跳检测
    */
-  private stopHeartbeat(): void {
-    if (this.heartbeatInterval) {
-      clearInterval(this.heartbeatInterval);
-      this.heartbeatInterval = null;
+  private clearHeartbeat(): void {
+    if (this.heartbeatTimer) {
+      clearInterval(this.heartbeatTimer)
+      this.heartbeatTimer = undefined
+    }
+  }
+
+  /**
+   * 等待连接建立
+   */
+  private async waitForConnection(): Promise<void> {
+    return new Promise((resolve, reject) => {
+      const timeout = setTimeout(() => {
+        reject(new Error('连接超时'))
+      }, 10000)
+
+      const checkConnection = () => {
+        if (this.state === 'connected') {
+          clearTimeout(timeout)
+          resolve()
+        } else if (this.state === 'error') {
+          clearTimeout(timeout)
+          reject(new Error('连接失败'))
+        } else {
+          setTimeout(checkConnection, 100)
+        }
+      }
+
+      checkConnection()
+    })
+  }
+
+  /**
+   * 标准化配置
+   */
+  private normalizeConfig(config: ShareDBConnectionConfig): ShareDBConnectionConfig {
+    return {
+      ...config,
+      reconnect: {
+        maxRetries: 10,
+        retryDelay: 1000,
+        exponentialBackoff: true,
+        ...config.reconnect
+      },
+      heartbeat: {
+        interval: 30000,
+        timeout: 5000,
+        ...config.heartbeat
+      }
     }
   }
 }

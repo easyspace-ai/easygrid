@@ -395,6 +395,9 @@ func setupShareDBRoutes(rg *gin.RouterGroup, cont *container.Container) {
 
 		// 连接管理
 		sharedb.GET("/connections", handler.GetConnections)
+		
+		// 开发环境：强制清理所有连接
+		sharedb.POST("/cleanup", handler.ForceCleanupConnections)
 	}
 }
 

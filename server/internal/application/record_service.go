@@ -16,6 +16,7 @@ import (
 	"github.com/easyspace-ai/luckdb/server/pkg/database"
 	pkgerrors "github.com/easyspace-ai/luckdb/server/pkg/errors"
 	"github.com/easyspace-ai/luckdb/server/pkg/logger"
+	"github.com/easyspace-ai/luckdb/server/pkg/sharedb/opbuilder"
 	"go.uber.org/zap"
 )
 
@@ -731,6 +732,24 @@ func (s *RecordService) publishRecordEvent(event *database.RecordEvent) {
 				logger.String("event_type", event.EventType))
 		}
 	}
+	
+	// 2. 发布到ShareDB（实时协作）
+	if s.shareDBService != nil && event.EventType == "record.update" {
+		// 创建ShareDB操作
+		op := sharedb.OTOperation{
+			"p": []interface{}{"data", event.Fields}, // 设置路径操作
+		}
+		
+		// 广播ShareDB操作
+		err := s.shareDBService.BroadcastOperation(event.TID, event.RID, []sharedb.OTOperation{op})
+		if err != nil {
+			logger.Error("ShareDB广播失败", logger.String("error", err.Error()))
+		} else {
+			logger.Info("✅ ShareDB操作已广播",
+				logger.String("table_id", event.TID),
+				logger.String("record_id", event.RID))
+		}
+	}
 
 	// 2. 发布到 ShareDB 实时协作系统 ✨
 	if s.shareDBService != nil {
@@ -751,19 +770,16 @@ func (s *RecordService) publishRecordEvent(event *database.RecordEvent) {
 			operations = append(operations, operation)
 		}
 
-		// 构建 Teable 风格的 ShareDB Operation
-		op := &sharedb.Operation{
-			Type:       sharedb.OpTypeEdit,
-			Op:         operations,
-			Version:    event.NewVersion,
-			Source:     "record-service",
-			Collection: collection,
-			DocID:      docID,
-			Seq:        0, // 可选：客户端序列号
+		// 转换为 opbuilder.Operation 类型
+		opBuilderOp := &opbuilder.Operation{
+			Path:     []interface{}{operations},
+			OldValue: nil,
+			NewValue: nil,
+			Type:     opbuilder.OpTypeSet,
 		}
-
+		
 		// 发布到 ShareDB
-		err := s.shareDBService.PublishOp(ctx, collection, docID, op)
+		err := s.shareDBService.PublishOp(ctx, collection, docID, opBuilderOp)
 		if err != nil {
 			logger.Error("ShareDB 操作发布失败",
 				logger.String("collection", collection),

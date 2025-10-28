@@ -1,0 +1,73 @@
+# Cursor 忽略文件 - 排除大文件和缓存目录以优化内存使用
+
+# Node.js 依赖
+node_modules/
+**/node_modules/
+
+# 构建产物
+dist/
+build/
+out/
+.next/
+.nuxt/
+.vuepress/
+.docusaurus/
+
+# 缓存目录
+.turbo/
+.cache/
+*.cache/
+.parcel-cache/
+.eslintcache
+.stylelintcache
+
+# TypeScript 编译缓存
+*.tsbuildinfo
+
+# 日志文件
+*.log
+logs/
+**/*.log
+
+# 数据库文件
+*.db
+*.sqlite
+*.sqlite3
+
+# 临时文件
+*.tmp
+*.temp
+.tmp/
+.temp/
+
+# 操作系统文件
+.DS_Store
+Thumbs.db
+*.swp
+*.swo
+*~
+
+# IDE 文件
+.vscode/
+.idea/
+*.sublime-*
+
+# 测试覆盖率
+coverage/
+.nyc_output/
+
+# 大型媒体文件（可选，根据需要调整）
+# *.png
+# *.jpg
+# *.jpeg
+# *.gif
+# *.svg
+# *.mp4
+# *.mov
+# *.avi
+
+# Source maps（如果不需要调试）
+# *.map
+
+# 大型子项目（如果不需要经常编辑）
+teable/

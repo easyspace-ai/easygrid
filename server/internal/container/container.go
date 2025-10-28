@@ -767,7 +767,7 @@ func (c *Container) initShareDB(logger *zap.Logger) {
 	logger.Info("正在初始化 ShareDB 服务...")
 
 	// 创建数据库适配器
-	adapter := sharedb.NewPostgresAdapter(c.db.GetDB(), logger)
+	adapter := sharedb.NewPostgresAdapter(c.db.GetDB(), logger, c.recordRepository)
 	logger.Info("✅ ShareDB PostgreSQL 适配器已创建")
 
 	// 创建发布订阅服务
@@ -808,6 +808,14 @@ func (c *Container) initShareDB(logger *zap.Logger) {
 	if c.recordService != nil {
 		c.recordService.SetShareDBService(c.realtimeManager.GetShareDBService())
 		logger.Info("✅ RecordService ShareDB 服务已设置")
+		
+		// 创建并设置 RecordBroadcaster
+		shareDBService := c.realtimeManager.GetShareDBService()
+		if shareDBService != nil {
+			broadcaster := application.NewRecordBroadcaster(shareDBService)
+			c.recordService.SetBroadcaster(broadcaster)
+			logger.Info("✅ RecordBroadcaster 已设置")
+		}
 	}
 
 	logger.Info("✅ ShareDB 服务初始化完成")

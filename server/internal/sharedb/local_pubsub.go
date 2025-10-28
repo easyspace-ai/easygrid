@@ -4,12 +4,13 @@ import (
 	"context"
 	"sync"
 
+	"github.com/easyspace-ai/luckdb/server/pkg/sharedb/opbuilder"
 	"go.uber.org/zap"
 )
 
 // LocalPubSub 本地发布订阅实现
 type LocalPubSub struct {
-	channels sync.Map // channel -> []chan *Operation
+	channels sync.Map // channel -> []chan *opbuilder.Operation
 	logger   *zap.Logger
 	mu       sync.RWMutex
 }
@@ -22,7 +23,7 @@ func NewLocalPubSub(logger *zap.Logger) PubSub {
 }
 
 // Publish 发布消息
-func (p *LocalPubSub) Publish(ctx context.Context, channels []string, op *Operation) error {
+func (p *LocalPubSub) Publish(ctx context.Context, channels []string, op *opbuilder.Operation) error {
 	p.mu.RLock()
 	defer p.mu.RUnlock()
 
@@ -33,7 +34,7 @@ func (p *LocalPubSub) Publish(ctx context.Context, channels []string, op *Operat
 			continue
 		}
 
-		subscribers := subscribersInterface.([]chan *Operation)
+		subscribers := subscribersInterface.([]chan *opbuilder.Operation)
 		
 		// 向所有订阅者发送消息
 		for _, subscriber := range subscribers {
@@ -57,16 +58,16 @@ func (p *LocalPubSub) Publish(ctx context.Context, channels []string, op *Operat
 }
 
 // Subscribe 订阅频道
-func (p *LocalPubSub) Subscribe(ctx context.Context, channel string, handler func(*Operation)) error {
+func (p *LocalPubSub) Subscribe(ctx context.Context, channel string, handler func(*opbuilder.Operation)) error {
 	p.mu.Lock()
 	defer p.mu.Unlock()
 
 	// 创建订阅者通道
-	subscriber := make(chan *Operation, 100) // 缓冲100个消息
+	subscriber := make(chan *opbuilder.Operation, 100) // 缓冲100个消息
 
 	// 获取或创建频道的订阅者列表
-	subscribersInterface, _ := p.channels.LoadOrStore(channel, make([]chan *Operation, 0))
-	subscribers := subscribersInterface.([]chan *Operation)
+	subscribersInterface, _ := p.channels.LoadOrStore(channel, make([]chan *opbuilder.Operation, 0))
+	subscribers := subscribersInterface.([]chan *opbuilder.Operation)
 	subscribers = append(subscribers, subscriber)
 	p.channels.Store(channel, subscribers)
 
@@ -104,7 +105,7 @@ func (p *LocalPubSub) Unsubscribe(ctx context.Context, channel string) error {
 		return nil
 	}
 
-	subscribers := subscribersInterface.([]chan *Operation)
+	subscribers := subscribersInterface.([]chan *opbuilder.Operation)
 	
 	// 关闭所有订阅者通道
 	for _, subscriber := range subscribers {

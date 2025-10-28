@@ -5,6 +5,8 @@ import (
 	"fmt"
 	"strings"
 
+	"github.com/easyspace-ai/luckdb/server/pkg/sharedb/opbuilder"
+	"github.com/easyspace-ai/luckdb/server/internal/domain/record/repository"
 	"gorm.io/gorm"
 	"go.uber.org/zap"
 )
@@ -22,11 +24,11 @@ type PostgresAdapter struct {
 }
 
 // NewPostgresAdapter 创建 PostgreSQL 适配器
-func NewPostgresAdapter(db *gorm.DB, logger *zap.Logger) Adapter {
+func NewPostgresAdapter(db *gorm.DB, logger *zap.Logger, recordRepo repository.RecordRepository) Adapter {
 	return &PostgresAdapter{
 		db:            db,
 		logger:        logger,
-		recordAdapter: NewRecordAdapter(db, logger),
+		recordAdapter: NewRecordAdapter(db, logger, recordRepo),
 		fieldAdapter:  NewFieldAdapter(db, logger),
 		viewAdapter:   NewViewAdapter(db, logger),
 		tableAdapter:  NewTableAdapter(db, logger),
@@ -104,16 +106,16 @@ func (a *PostgresAdapter) GetSnapshotBulk(ctx context.Context, collection string
 }
 
 // GetOps 获取操作历史
-func (a *PostgresAdapter) GetOps(ctx context.Context, collection string, id string, from, to int64) ([]*Operation, error) {
+func (a *PostgresAdapter) GetOps(ctx context.Context, collection string, id string, from, to int64) ([]*opbuilder.Operation, error) {
 	// 这里应该实现操作历史查询
 	// 暂时返回空操作列表
-	return []*Operation{}, nil
+	return []*opbuilder.Operation{}, nil
 }
 
 // SkipPoll 跳过轮询优化
-func (a *PostgresAdapter) SkipPoll(ctx context.Context, collection string, id string, op *Operation, query interface{}) bool {
+func (a *PostgresAdapter) SkipPoll(ctx context.Context, collection string, id string, op *opbuilder.Operation, query interface{}) bool {
 	// 如果操作没有实际内容，可以跳过轮询
-	if op.Op == nil || len(op.Op) == 0 {
+	if op.Path == nil {
 		return true
 	}
 	return false

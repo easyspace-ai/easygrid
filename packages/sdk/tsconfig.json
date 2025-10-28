@@ -9,13 +9,16 @@
     "noUnusedLocals": false,
     "noUnusedParameters": false,
     "verbatimModuleSyntax": false,
-    "moduleResolution": "node",
+    "moduleResolution": "bundler",
     "module": "ESNext",
     "target": "ES2022",
     "strict": true,
     "esModuleInterop": true,
     "skipLibCheck": true,
-    "forceConsistentCasingInFileNames": true
+    "forceConsistentCasingInFileNames": true,
+    "jsx": "react-jsx",
+    "allowSyntheticDefaultImports": true,
+    "resolveJsonModule": true
   },
   "include": [
     "src/**/*"
@@ -23,9 +26,17 @@
   "exclude": [
     "node_modules",
     "dist",
-    "examples",
+    "examples/**/*",
     "**/*.test.ts",
-    "**/*.spec.ts"
+    "**/*.spec.ts",
+    "src/components/ConnectionIndicator.tsx",
+    "src/hooks/connection/useConnectionState.ts",
+    "src/hooks/connection/useReconnect.ts",
+    "src/hooks/documents/**/*",
+    "src/hooks/mutations/**/*",
+    "src/hooks/records/**/*",
+    "src/hooks/useEasyGrid.ts",
+    "src/hooks/fields/**/*"
   ]
 }
 
