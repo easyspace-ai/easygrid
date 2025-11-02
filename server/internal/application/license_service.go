@@ -128,12 +128,11 @@ func (s *LicenseService) GetUsage(ctx context.Context, licenseID string) (map[st
 
 	// 简化的使用情况统计
 	return map[string]interface{}{
-		"license_id": licenseID,
-		"max_users":  license.MaxUsers,
-		"max_spaces": license.MaxSpaces,
+		"license_id":  licenseID,
+		"max_users":   license.MaxUsers,
+		"max_spaces":  license.MaxSpaces,
 		"max_storage": license.MaxStorage,
-		"status":     license.Status,
-		"is_active":  license.IsActive,
+		"status":      license.Status,
+		"is_active":   license.IsActive,
 	}, nil
 }
-

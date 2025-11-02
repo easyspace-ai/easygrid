@@ -5,15 +5,15 @@ import "errors"
 // Base相关领域错误
 var (
 	// Base基础错误
-	ErrBaseNotFound           = errors.New("base not found")
-	ErrBaseAlreadyExists      = errors.New("base already exists")
+	ErrBaseNotFound            = errors.New("base not found")
+	ErrBaseAlreadyExists       = errors.New("base already exists")
 	ErrCannotModifyDeletedBase = errors.New("cannot modify deleted base")
-	ErrBaseAlreadyDeleted     = errors.New("base is already deleted")
-	
+	ErrBaseAlreadyDeleted      = errors.New("base is already deleted")
+
 	// Base名称错误
-	ErrBaseNameEmpty          = errors.New("base name cannot be empty")
-	ErrBaseNameTooLong        = errors.New("base name too long (max 100 characters)")
-	
+	ErrBaseNameEmpty   = errors.New("base name cannot be empty")
+	ErrBaseNameTooLong = errors.New("base name too long (max 100 characters)")
+
 	// 权限错误
 	ErrInsufficientPermission = errors.New("insufficient permission")
 	ErrNotBaseOwner           = errors.New("not base owner")

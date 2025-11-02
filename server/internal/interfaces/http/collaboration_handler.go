@@ -55,7 +55,10 @@ func (h *CollaborationHandler) UpdatePresence(c *gin.Context) {
 	}
 
 	// 更新在线状态
-	// 旧协作服务依赖 WebSocket，已移除；改走业务事件/YJS 侧，此处仅返回成功占位
+	// 状态：占位符实现
+	// 原因：旧协作服务依赖 WebSocket，已移除；改走业务事件/YJS 侧
+	// 计划：未来将基于业务事件系统实现真实的协作功能
+	// 当前：仅返回成功响应以保持API兼容性
 
 	response.SuccessWithMessage(c, map[string]bool{"success": true}, "")
 }
@@ -90,6 +93,10 @@ func (h *CollaborationHandler) RemovePresence(c *gin.Context) {
 	}
 
 	// 移除在线状态（legacy 占位，无实际后端存储）
+	// 状态：占位符实现
+	// 原因：协作系统已重构，不再需要传统的在线状态管理
+	// 计划：未来将基于业务事件系统实现真实的协作功能
+	// 当前：仅返回成功响应以保持API兼容性
 
 	response.SuccessWithMessage(c, map[string]bool{"success": true}, "")
 }

@@ -123,4 +123,3 @@ type MCPCircuitBreakerConfig struct {
 	Timeout          time.Duration `mapstructure:"timeout"`
 	MaxRequests      int           `mapstructure:"max_requests"`
 }
-

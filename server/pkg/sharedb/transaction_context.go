@@ -3,7 +3,7 @@ package sharedb
 import (
 	"context"
 	"sync"
-	
+
 	"github.com/easyspace-ai/luckdb/server/pkg/sharedb/opbuilder"
 )
 

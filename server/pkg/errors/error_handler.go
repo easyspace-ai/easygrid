@@ -34,7 +34,7 @@ func (h *ErrorHandler) HandleError(err error) *ShareDBError {
 
 	// 根据错误消息判断错误类型
 	errMsg := strings.ToLower(err.Error())
-	
+
 	switch {
 	case strings.Contains(errMsg, "unauthorized") || strings.Contains(errMsg, "unauth"):
 		return NewShareDBError("UNAUTHORIZED", "Authentication required")
@@ -115,9 +115,9 @@ func (h *ErrorHandler) ValidateError(err *ShareDBError) error {
 
 // ShareDBErrorResponse ShareDB 错误响应结构
 type ShareDBErrorResponse struct {
-	Error   *ShareDBError `json:"error"`
-	Success bool          `json:"success"`
-	RequestID string      `json:"requestId,omitempty"`
+	Error     *ShareDBError `json:"error"`
+	Success   bool          `json:"success"`
+	RequestID string        `json:"requestId,omitempty"`
 }
 
 // NewShareDBErrorResponse 创建 ShareDB 错误响应
@@ -131,57 +131,57 @@ func NewShareDBErrorResponse(err *ShareDBError, requestID string) *ShareDBErrorR
 
 // ShareDBErrorCodeMap ShareDB 错误代码映射
 var ShareDBErrorCodeMap = map[string]string{
-	"UNAUTHORIZED":         "认证失败",
-	"UNAUTHORIZED_SHARE":   "分享链接认证失败",
-	"TOKEN_EXPIRED":       "令牌已过期",
-	"INVALID_TOKEN":       "无效令牌",
-	"DOCUMENT_NOT_FOUND":  "文档不存在",
-	"DOCUMENT_EXISTS":     "文档已存在",
-	"DOCUMENT_LOCKED":     "文档已锁定",
-	"DOCUMENT_CORRUPTED":  "文档损坏",
-	"VIEW_NOT_FOUND":      "视图不存在",
-	"VIEW_EXISTS":         "视图已存在",
-	"VIEW_INVALID":        "视图无效",
-	"VIEW_PERMISSION_DENIED": "视图权限不足",
-	"FIELD_NOT_FOUND":     "字段不存在",
-	"FIELD_EXISTS":        "字段已存在",
-	"FIELD_INVALID":       "字段无效",
-	"FIELD_TYPE_MISMATCH": "字段类型不匹配",
-	"FIELD_REQUIRED":      "字段必填",
-	"RECORD_NOT_FOUND":    "记录不存在",
-	"RECORD_EXISTS":       "记录已存在",
-	"RECORD_INVALID":      "记录无效",
+	"UNAUTHORIZED":             "认证失败",
+	"UNAUTHORIZED_SHARE":       "分享链接认证失败",
+	"TOKEN_EXPIRED":            "令牌已过期",
+	"INVALID_TOKEN":            "无效令牌",
+	"DOCUMENT_NOT_FOUND":       "文档不存在",
+	"DOCUMENT_EXISTS":          "文档已存在",
+	"DOCUMENT_LOCKED":          "文档已锁定",
+	"DOCUMENT_CORRUPTED":       "文档损坏",
+	"VIEW_NOT_FOUND":           "视图不存在",
+	"VIEW_EXISTS":              "视图已存在",
+	"VIEW_INVALID":             "视图无效",
+	"VIEW_PERMISSION_DENIED":   "视图权限不足",
+	"FIELD_NOT_FOUND":          "字段不存在",
+	"FIELD_EXISTS":             "字段已存在",
+	"FIELD_INVALID":            "字段无效",
+	"FIELD_TYPE_MISMATCH":      "字段类型不匹配",
+	"FIELD_REQUIRED":           "字段必填",
+	"RECORD_NOT_FOUND":         "记录不存在",
+	"RECORD_EXISTS":            "记录已存在",
+	"RECORD_INVALID":           "记录无效",
 	"RECORD_PERMISSION_DENIED": "记录权限不足",
-	"TABLE_NOT_FOUND":     "表格不存在",
-	"TABLE_EXISTS":        "表格已存在",
-	"TABLE_INVALID":       "表格无效",
-	"TABLE_PERMISSION_DENIED": "表格权限不足",
-	"VERSION_MISMATCH":    "版本不匹配",
-	"OPERATION_REJECTED":  "操作被拒绝",
-	"OPERATION_INVALID":   "操作无效",
-	"OPERATION_CONFLICT":  "操作冲突",
-	"OPERATION_TIMEOUT":   "操作超时",
-	"NETWORK_ERROR":       "网络错误",
-	"CONNECTION_LOST":     "连接丢失",
-	"CONNECTION_TIMEOUT":  "连接超时",
-	"CONNECTION_REFUSED":  "连接被拒绝",
-	"SERVER_ERROR":        "服务器错误",
-	"SERVER_OVERLOADED":   "服务器过载",
-	"SERVER_MAINTENANCE":  "服务器维护中",
-	"SERVER_UNAVAILABLE":  "服务器不可用",
-	"DATA_CORRUPTED":      "数据损坏",
-	"DATA_INVALID":        "数据无效",
-	"DATA_TOO_LARGE":      "数据过大",
-	"DATA_NOT_FOUND":      "数据不存在",
-	"CACHE_MISS":          "缓存未命中",
-	"CACHE_ERROR":         "缓存错误",
-	"CACHE_TIMEOUT":       "缓存超时",
-	"PERMISSION_DENIED":    "权限不足",
+	"TABLE_NOT_FOUND":          "表格不存在",
+	"TABLE_EXISTS":             "表格已存在",
+	"TABLE_INVALID":            "表格无效",
+	"TABLE_PERMISSION_DENIED":  "表格权限不足",
+	"VERSION_MISMATCH":         "版本不匹配",
+	"OPERATION_REJECTED":       "操作被拒绝",
+	"OPERATION_INVALID":        "操作无效",
+	"OPERATION_CONFLICT":       "操作冲突",
+	"OPERATION_TIMEOUT":        "操作超时",
+	"NETWORK_ERROR":            "网络错误",
+	"CONNECTION_LOST":          "连接丢失",
+	"CONNECTION_TIMEOUT":       "连接超时",
+	"CONNECTION_REFUSED":       "连接被拒绝",
+	"SERVER_ERROR":             "服务器错误",
+	"SERVER_OVERLOADED":        "服务器过载",
+	"SERVER_MAINTENANCE":       "服务器维护中",
+	"SERVER_UNAVAILABLE":       "服务器不可用",
+	"DATA_CORRUPTED":           "数据损坏",
+	"DATA_INVALID":             "数据无效",
+	"DATA_TOO_LARGE":           "数据过大",
+	"DATA_NOT_FOUND":           "数据不存在",
+	"CACHE_MISS":               "缓存未命中",
+	"CACHE_ERROR":              "缓存错误",
+	"CACHE_TIMEOUT":            "缓存超时",
+	"PERMISSION_DENIED":        "权限不足",
 	"INSUFFICIENT_PERMISSIONS": "权限不足",
-	"ACCESS_DENIED":       "访问被拒绝",
-	"QUOTA_EXCEEDED":      "配额超限",
-	"RATE_LIMIT_EXCEEDED": "频率限制",
-	"STORAGE_QUOTA_EXCEEDED": "存储配额超限",
+	"ACCESS_DENIED":            "访问被拒绝",
+	"QUOTA_EXCEEDED":           "配额超限",
+	"RATE_LIMIT_EXCEEDED":      "频率限制",
+	"STORAGE_QUOTA_EXCEEDED":   "存储配额超限",
 }
 
 // GetShareDBLocalizedMessage 获取 ShareDB 本地化错误消息

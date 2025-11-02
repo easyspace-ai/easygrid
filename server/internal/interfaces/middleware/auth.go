@@ -87,7 +87,6 @@ func (s *JWTAuthService) ValidateToken(tokenString string) (*Claims, error) {
 // GetUserFromToken 从令牌获取用户信息
 func (s *JWTAuthService) GetUserFromToken(ctx context.Context, tokenString string) (*models.User, error) {
 
-	//fmt.Println(tokenString)
 	claims, err := s.ValidateToken(tokenString)
 	if err != nil {
 		return nil, err

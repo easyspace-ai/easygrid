@@ -144,4 +144,3 @@ func parseTableURI(uri string) (spaceID, tableID, resourceType string, err error
 
 	return spaceID, tableID, resourceType, nil
 }
-

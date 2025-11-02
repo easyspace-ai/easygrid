@@ -124,4 +124,3 @@ func (c *LookupCalculator) isMultipleLink(field *entity.Field) bool {
 	}
 	return false
 }
-

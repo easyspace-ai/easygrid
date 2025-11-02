@@ -15,4 +15,3 @@ type RelatedRecordItem struct {
 	ToID   string // 目标记录ID
 	FromID string // 源记录ID（可选）
 }
-

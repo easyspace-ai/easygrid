@@ -121,7 +121,19 @@ func (h *AttachmentHandler) NotifyUpload(c *gin.Context) {
 		return
 	}
 
-	filename := c.Query("filename")
+	// 优先从请求体获取 filename，如果没有则从 query 参数获取
+	var filename string
+	var requestBody map[string]interface{}
+	if err := c.ShouldBindJSON(&requestBody); err == nil {
+		if fn, ok := requestBody["filename"].(string); ok {
+			filename = fn
+		}
+	}
+	
+	// 如果请求体中获取不到，从 query 参数获取
+	if filename == "" {
+		filename = c.Query("filename")
+	}
 
 	respData2, err := h.attachmentService.NotifyUpload(c.Request.Context(), token, filename)
 	if err != nil {
@@ -145,7 +157,12 @@ func (h *AttachmentHandler) NotifyUpload(c *gin.Context) {
 // @Failure 404 {object} ErrorResponse
 // @Router /api/attachments/read/{path} [get]
 func (h *AttachmentHandler) ReadFile(c *gin.Context) {
+	// 使用 *path 通配符路由，支持路径中的斜杠
 	path := c.Param("path")
+	// 移除开头的斜杠（如果存在）
+	if len(path) > 0 && path[0] == '/' {
+		path = path[1:]
+	}
 	if path == "" {
 		h.handleError(c, errors.ErrBadRequest.WithDetails("Path is required"))
 		return
@@ -274,7 +291,7 @@ func (h *AttachmentHandler) ListAttachments(c *gin.Context) {
 // @Failure 500 {object} ErrorResponse
 // @Router /api/tables/{table_id}/attachments/stats [get]
 func (h *AttachmentHandler) GetAttachmentStats(c *gin.Context) {
-	tableID := c.Param("table_id")
+	tableID := c.Param("tableId")
 	if tableID == "" {
 		h.handleError(c, errors.ErrBadRequest.WithDetails("table_id is required"))
 		return

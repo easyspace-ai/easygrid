@@ -3,7 +3,7 @@ package monitoring
 import (
 	"context"
 	"time"
-	
+
 	"go.uber.org/zap"
 )
 
@@ -24,20 +24,20 @@ func NewPerformanceMiddleware(monitor *PerformanceMonitor, logger *zap.Logger) *
 // WrapOperation 包装操作以进行性能监控
 func (pm *PerformanceMiddleware) WrapOperation(operationType string, operation func() error) error {
 	start := time.Now()
-	
+
 	err := operation()
-	
+
 	duration := time.Since(start)
 	success := err == nil
-	
+
 	var errorCode string
 	if err != nil {
 		errorCode = pm.extractErrorCode(err)
 	}
-	
+
 	// 记录操作指标
 	pm.monitor.RecordOperation(operationType, duration, success, errorCode, 0)
-	
+
 	// 记录详细日志
 	if pm.logger != nil {
 		if success {
@@ -54,27 +54,27 @@ func (pm *PerformanceMiddleware) WrapOperation(operationType string, operation f
 			)
 		}
 	}
-	
+
 	return err
 }
 
 // WrapOperationWithBytes 包装带字节数的操作
 func (pm *PerformanceMiddleware) WrapOperationWithBytes(operationType string, bytes int64, operation func() error) error {
 	start := time.Now()
-	
+
 	err := operation()
-	
+
 	duration := time.Since(start)
 	success := err == nil
-	
+
 	var errorCode string
 	if err != nil {
 		errorCode = pm.extractErrorCode(err)
 	}
-	
+
 	// 记录操作指标
 	pm.monitor.RecordOperation(operationType, duration, success, errorCode, bytes)
-	
+
 	// 记录详细日志
 	if pm.logger != nil {
 		if success {
@@ -93,7 +93,7 @@ func (pm *PerformanceMiddleware) WrapOperationWithBytes(operationType string, by
 			)
 		}
 	}
-	
+
 	return err
 }
 
@@ -109,11 +109,11 @@ func (pm *PerformanceMiddleware) extractErrorCode(err error) string {
 	if err == nil {
 		return ""
 	}
-	
+
 	// 尝试从错误中提取错误代码
 	// 这里可以根据实际的错误类型进行扩展
 	errStr := err.Error()
-	
+
 	// 简单的错误代码提取逻辑
 	if len(errStr) > 0 {
 		// 假设错误代码是错误消息的前几个字符
@@ -122,18 +122,18 @@ func (pm *PerformanceMiddleware) extractErrorCode(err error) string {
 		}
 		return errStr
 	}
-	
+
 	return "UNKNOWN_ERROR"
 }
 
 // MonitorConnection 监控连接
 func (pm *PerformanceMiddleware) MonitorConnection(connectionID string, operation func()) {
 	start := time.Now()
-	
+
 	operation()
-	
+
 	duration := time.Since(start)
-	
+
 	if pm.logger != nil {
 		pm.logger.Debug("Connection operation completed",
 			zap.String("connectionID", connectionID),

@@ -2,10 +2,10 @@ package entity
 
 import (
 	"time"
-	
-	"github.com/google/uuid"
+
 	"github.com/easyspace-ai/luckdb/server/internal/domain/space"
 	"github.com/easyspace-ai/luckdb/server/internal/domain/space/valueobject"
+	"github.com/google/uuid"
 )
 
 // Collaborator 协作者实体
@@ -32,9 +32,9 @@ func NewCollaborator(
 			nil,
 		)
 	}
-	
+
 	now := time.Now()
-	
+
 	return &Collaborator{
 		id:        uuid.New().String(),
 		spaceID:   spaceID,
@@ -47,12 +47,12 @@ func NewCollaborator(
 
 // ==================== 访问器方法 ====================
 
-func (c *Collaborator) ID() string                           { return c.id }
-func (c *Collaborator) SpaceID() valueobject.SpaceID         { return c.spaceID }
-func (c *Collaborator) UserID() string                       { return c.userID }
-func (c *Collaborator) Role() valueobject.CollaboratorRole   { return c.role }
-func (c *Collaborator) JoinedAt() time.Time                  { return c.joinedAt }
-func (c *Collaborator) UpdatedAt() time.Time                 { return c.updatedAt }
+func (c *Collaborator) ID() string                         { return c.id }
+func (c *Collaborator) SpaceID() valueobject.SpaceID       { return c.spaceID }
+func (c *Collaborator) UserID() string                     { return c.userID }
+func (c *Collaborator) Role() valueobject.CollaboratorRole { return c.role }
+func (c *Collaborator) JoinedAt() time.Time                { return c.joinedAt }
+func (c *Collaborator) UpdatedAt() time.Time               { return c.updatedAt }
 
 // IsOwner 是否为拥有者
 func (c *Collaborator) IsOwner() bool {
@@ -86,10 +86,9 @@ func (c *Collaborator) ChangeRole(newRole valueobject.CollaboratorRole) error {
 			nil,
 		)
 	}
-	
+
 	c.role = newRole
 	c.updatedAt = time.Now()
-	
+
 	return nil
 }
-

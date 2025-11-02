@@ -79,17 +79,17 @@ func (agg *UserAggregate) LinkAccount(account *entity.Account) error {
 	if agg.HasProvider(account.Provider()) {
 		return user.ErrAccountAlreadyLinked
 	}
-	
+
 	// 添加账户
 	agg.accounts = append(agg.accounts, account)
-	
+
 	// 发布领域事件
 	agg.addDomainEvent(event.NewAccountLinked(
 		agg.user.ID(),
 		account.ID(),
 		account.Provider(),
 	))
-	
+
 	return nil
 }
 
@@ -99,18 +99,18 @@ func (agg *UserAggregate) UnlinkAccount(provider string) error {
 		if account.Provider() == provider {
 			// 移除账户
 			agg.accounts = append(agg.accounts[:i], agg.accounts[i+1:]...)
-			
+
 			// 发布领域事件
 			agg.addDomainEvent(event.NewAccountUnlinked(
 				agg.user.ID(),
 				account.ID(),
 				provider,
 			))
-			
+
 			return nil
 		}
 	}
-	
+
 	return user.ErrAccountNotFound
 }
 
@@ -119,13 +119,13 @@ func (agg *UserAggregate) Activate() error {
 	if err := agg.user.Activate(); err != nil {
 		return err
 	}
-	
+
 	// 发布领域事件
 	agg.addDomainEvent(event.NewUserActivated(
 		agg.user.ID(),
 		agg.user.Email(),
 	))
-	
+
 	return nil
 }
 
@@ -134,13 +134,13 @@ func (agg *UserAggregate) Deactivate(reason string) error {
 	if err := agg.user.Deactivate(reason); err != nil {
 		return err
 	}
-	
+
 	// 发布领域事件
 	agg.addDomainEvent(event.NewUserDeactivated(
 		agg.user.ID(),
 		reason,
 	))
-	
+
 	return nil
 }
 
@@ -149,13 +149,13 @@ func (agg *UserAggregate) Delete() error {
 	if err := agg.user.SoftDelete(); err != nil {
 		return err
 	}
-	
+
 	// 发布领域事件
 	agg.addDomainEvent(event.NewUserDeleted(
 		agg.user.ID(),
 		agg.user.Email(),
 	))
-	
+
 	return nil
 }
 
@@ -165,4 +165,3 @@ func (agg *UserAggregate) Delete() error {
 func (agg *UserAggregate) addDomainEvent(evt event.DomainEvent) {
 	agg.domainEvents = append(agg.domainEvents, evt)
 }
-

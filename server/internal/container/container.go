@@ -3,6 +3,7 @@ package container
 import (
 	"context"
 	"fmt"
+	"time"
 
 	"github.com/dop251/goja"
 	"gorm.io/gorm"
@@ -13,9 +14,11 @@ import (
 	"github.com/easyspace-ai/luckdb/server/internal/infrastructure/cache"
 	"github.com/easyspace-ai/luckdb/server/internal/infrastructure/database"
 	"github.com/easyspace-ai/luckdb/server/internal/infrastructure/repository"
+	"github.com/easyspace-ai/luckdb/server/internal/infrastructure/storage"
 	"github.com/easyspace-ai/luckdb/server/pkg/logger"
 
 	// 领域层仓储接口
+	attachmentRepo "github.com/easyspace-ai/luckdb/server/internal/domain/attachment"
 	baseRepo "github.com/easyspace-ai/luckdb/server/internal/domain/base/repository"
 	collaboratorRepo "github.com/easyspace-ai/luckdb/server/internal/domain/collaborator/repository"
 	fieldRepo "github.com/easyspace-ai/luckdb/server/internal/domain/fields/repository"
@@ -57,6 +60,8 @@ type Container struct {
 	spaceRepository        spaceRepo.SpaceRepository
 	tableRepository        tableRepo.TableRepository
 	viewRepository         viewRepo.ViewRepository
+	attachmentRepository   attachmentRepo.Repository
+	uploadTokenRepository  attachmentRepo.UploadTokenRepository
 
 	// 应用服务层
 	errorService        *application.ErrorService // 统一错误处理服务 ✨
@@ -72,6 +77,7 @@ type Container struct {
 	fieldService        *application.FieldService
 	recordService       *application.RecordService
 	viewService         *application.ViewService
+	attachmentService   attachmentRepo.Service
 
 	// 基础设施服务 ✨
 	batchService       *application.BatchService       // 批量操作服务
@@ -125,15 +131,19 @@ func (c *Container) Initialize() error {
 		logger.Info("✅ 缓存服务已就绪")
 	}
 
-	// 3. 初始化仓储层
+	// 3. 初始化基础设施服务（需要在仓储之前，因为仓储可能需要缓存服务）
+	c.initInfrastructureServicesEarly()
+	logger.Info("✅ 基础设施服务已初始化")
+
+	// 4. 初始化仓储层
 	c.initRepositories()
 	logger.Info("✅ 仓储层已初始化")
 
-	// 4. 初始化应用服务层
+	// 5. 初始化应用服务层
 	c.initServices()
 	logger.Info("✅ 应用服务层已初始化")
 
-	// 5. 初始化 JSVM 和实时通信服务
+	// 6. 初始化 JSVM 和实时通信服务
 	if err := c.initJSVMServices(); err != nil {
 		logger.Warn("JSVM 服务初始化失败（可选服务）", logger.ErrorField(err))
 		// JSVM 失败不阻塞启动
@@ -143,6 +153,20 @@ func (c *Container) Initialize() error {
 
 	logger.Info("🎉 依赖注入容器初始化完成")
 	return nil
+}
+
+// initInfrastructureServicesEarly 早期初始化基础设施服务（只初始化缓存服务）
+func (c *Container) initInfrastructureServicesEarly() {
+	// 只初始化缓存服务（其他服务在initServices中初始化）
+	// 临时创建ErrorService用于缓存服务初始化
+	errorService := application.NewErrorService()
+	cacheConfig := application.DefaultCacheConfig()
+	c.cacheService = application.NewCacheService(
+		c.cacheClient,
+		errorService,
+		cacheConfig,
+	)
+	// 注意：这里创建的errorService是临时的，稍后在initServices中会用正确的errorService替换cacheService
 }
 
 // initDatabase 初始化数据库连接和Provider
@@ -194,23 +218,53 @@ func (c *Container) initRepositories() {
 	// 表格仓储
 	c.tableRepository = repository.NewTableRepository(db)
 
-	// 字段仓储
-	c.fieldRepository = repository.NewFieldRepository(db)
+	// ✅ 字段仓储（带缓存）
+	baseFieldRepo := repository.NewFieldRepository(db)
+	if c.cacheService != nil {
+		// 使用缓存包装器（5分钟TTL）
+		c.fieldRepository = repository.NewCachedFieldRepository(
+			baseFieldRepo,
+			c.cacheService,
+			5*time.Minute,
+		)
+		logger.Info("✅ 字段仓储已启用缓存")
+	} else {
+		c.fieldRepository = baseFieldRepo
+	}
 
 	// ✅ 记录仓储（完全动态表架构）
 	// 需要在 tableRepository 和 fieldRepository 之后初始化
-	c.recordRepository = repository.NewRecordRepositoryDynamic(
+	baseRecordRepo := repository.NewRecordRepositoryDynamic(
 		db,
 		c.dbProvider,      // ✅ 注入 DBProvider
 		c.tableRepository, // ✅ 注入 TableRepository
 		c.fieldRepository, // ✅ 注入 FieldRepository
 	)
 
+	// ✅ 记录仓储（带缓存）
+	if c.cacheService != nil {
+		// 使用缓存包装器（2分钟TTL，记录变化频繁）
+		c.recordRepository = repository.NewCachedRecordRepository(
+			baseRecordRepo,
+			c.cacheService,
+			2*time.Minute,
+		)
+		logger.Info("✅ 记录仓储已启用缓存")
+	} else {
+		c.recordRepository = baseRecordRepo
+	}
+
 	// 空间仓储
 	c.spaceRepository = repository.NewSpaceRepository(db)
 
 	// 视图仓储
 	c.viewRepository = repository.NewViewRepository(db)
+
+	// ✅ 附件仓储
+	c.attachmentRepository = repository.NewAttachmentRepository(db, nil) // tokenRepo 稍后设置
+	c.uploadTokenRepository = repository.NewUploadTokenRepository(db)
+	// 重新初始化附件仓储以注入 tokenRepo
+	c.attachmentRepository = repository.NewAttachmentRepository(db, c.uploadTokenRepository)
 
 }
 
@@ -221,64 +275,22 @@ func (c *Container) initRepositories() {
 //   - 计算服务需要在RecordService之前初始化
 //   - RecordService依赖CalculationService实现自动计算
 func (c *Container) initServices() {
-	// 错误处理服务（最先初始化，其他服务可能依赖它）
+	// 1. 错误处理服务（最先初始化，其他服务可能依赖它）
 	c.errorService = application.NewErrorService()
 
-	// 基础设施服务
-	c.initInfrastructureServices()
+	// 2. 更新缓存服务的ErrorService（如果已初始化）
+	if c.cacheService != nil {
+		// 重新创建缓存服务以使用正确的errorService
+		cacheConfig := application.DefaultCacheConfig()
+		c.cacheService = application.NewCacheService(
+			c.cacheClient,
+			c.errorService,
+			cacheConfig,
+		)
+	}
 
-	// Token 服务
-	c.tokenService = application.NewTokenService(c.cfg.JWT)
-
-	// 用户服务
-	c.userService = application.NewUserService(c.userRepository)
-
-	// 用户配置服务 ✨
-	c.userConfigService = application.NewUserConfigService(c.userConfigRepository)
-
-	// 认证服务
-	c.authService = application.NewAuthService(c.userRepository, c.tokenService)
-
-	// 权限服务V2 ✨
-	c.permissionServiceV2 = application.NewPermissionServiceV2(
-		c.collaboratorRepository,
-		c.spaceRepository,
-		c.baseRepository,
-		c.tableRepository,
-	)
-
-	// 协作者服务 ✨
-	c.collaboratorService = application.NewCollaboratorService(c.collaboratorRepository)
-
-	// 核心业务服务
-	c.spaceService = application.NewSpaceService(c.spaceRepository)
-	c.baseService = application.NewBaseService(c.baseRepository, c.spaceRepository, c.dbProvider) // ✅ 注入DBProvider + SpaceRepository
-
-	// ✅ 先初始化 ViewService（独立服务，不依赖其他服务）
-	// 注意：这里先传 nil，稍后在 initInfrastructureServices 后重新设置
-	c.viewService = application.NewViewService(c.viewRepository, c.tableRepository, nil)
-
-	// ✅ 初始化 FieldService (暂时传nil，待实现broadcaster)
-	c.fieldService = application.NewFieldService(
-		c.fieldRepository,
-		nil,               // depGraphRepo（待实现）
-		nil,               // broadcaster（已移除 WebSocket 服务）
-		c.tableRepository, // ✅ 注入TableRepository
-		c.dbProvider,      // ✅ 注入DBProvider
-	)
-
-	// ✅ 初始化 TableService（依赖 FieldService 和 ViewService）
-	c.tableService = application.NewTableService(
-		c.tableRepository,
-		c.baseRepository,
-		c.spaceRepository,
-		c.recordRepository, // ✅ 注入RecordRepository
-		c.fieldService,
-		c.viewService, // ✅ 注入ViewService
-		c.dbProvider,  // ✅ 注入DBProvider
-	)
-
-	// ✨ 业务事件管理器初始化（带Redis分布式广播）
+	// 3. 业务事件管理器初始化（需要在基础设施服务之前，因为基础设施服务可能依赖它）
+	// 带Redis分布式广播
 	if c.cacheClient != nil {
 		c.businessEventManager = events.NewBusinessEventManagerWithRedis(
 			logger.Logger,
@@ -291,14 +303,64 @@ func (c *Container) initServices() {
 		logger.Info("✅ 业务事件管理器已初始化（本地模式）")
 	}
 
-	// ✨ 初始化模块化计算服务（重构后的架构）
-	c.initCalculationServices()
-
-	// ✨ 初始化基础设施服务
+	// 4. 基础设施服务（只初始化一次）
 	c.initInfrastructureServices()
 
-	// ✅ 重新设置 ViewService 的 businessEventManager（现在 businessEventManager 已经初始化）
+	// 5. Token 服务
+	c.tokenService = application.NewTokenService(c.cfg.JWT)
+
+	// 6. 用户服务
+	c.userService = application.NewUserService(c.userRepository)
+
+	// 7. 用户配置服务 ✨
+	c.userConfigService = application.NewUserConfigService(c.userConfigRepository)
+
+	// 8. 认证服务
+	c.authService = application.NewAuthService(c.userRepository, c.tokenService)
+
+	// 9. 权限服务V2 ✨
+	c.permissionServiceV2 = application.NewPermissionServiceV2(
+		c.collaboratorRepository,
+		c.spaceRepository,
+		c.baseRepository,
+		c.tableRepository,
+		c.fieldRepository, // ✅ 添加FieldRepository支持Field权限检查
+		c.viewRepository,  // ✅ 添加ViewRepository支持View权限检查
+	)
+
+	// 10. 协作者服务 ✨
+	c.collaboratorService = application.NewCollaboratorService(c.collaboratorRepository)
+
+	// 11. 核心业务服务
+	c.spaceService = application.NewSpaceService(c.spaceRepository)
+	c.baseService = application.NewBaseService(c.baseRepository, c.spaceRepository, c.dbProvider) // ✅ 注入DBProvider + SpaceRepository
+
+	// 12. ViewService（一次性初始化，传入正确的businessEventManager）
 	c.viewService = application.NewViewService(c.viewRepository, c.tableRepository, c.businessEventManager)
+
+	// 13. FieldService（使用业务事件管理器创建广播器）
+	fieldBroadcaster := application.NewFieldBroadcaster(c.businessEventManager)
+	c.fieldService = application.NewFieldService(
+		c.fieldRepository,
+		nil,               // depGraphRepo（可选，待实现依赖图缓存仓储）
+		fieldBroadcaster,  // ✅ 使用业务事件管理器广播字段变更
+		c.tableRepository, // ✅ 注入TableRepository
+		c.dbProvider,      // ✅ 注入DBProvider
+	)
+
+	// 14. TableService（依赖 FieldService 和 ViewService）
+	c.tableService = application.NewTableService(
+		c.tableRepository,
+		c.baseRepository,
+		c.spaceRepository,
+		c.recordRepository, // ✅ 注入RecordRepository
+		c.fieldService,
+		c.viewService, // ✅ 注入ViewService
+		c.dbProvider,  // ✅ 注入DBProvider
+	)
+
+	// 15. ✨ 初始化模块化计算服务（重构后的架构）
+	c.initCalculationServices()
 
 	// ✨ 计算引擎服务（在RecordService之前初始化）
 	// 仅使用业务事件/YJS+SSE，不再注入旧 WebSocket
@@ -323,6 +385,68 @@ func (c *Container) initServices() {
 		typecastService,        // ✅ 注入验证服务
 		nil,                    // ✨ ShareDB 服务将在 initJSVMServices 中设置
 	)
+
+	// ✅ 初始化附件服务
+	c.initAttachmentService()
+}
+
+// initAttachmentService 初始化附件服务
+func (c *Container) initAttachmentService() {
+	logger.Info("正在初始化附件服务...")
+
+	// 1. 创建存储实现（本地存储）
+	uploadPath := c.cfg.Storage.Local.UploadPath
+	if uploadPath == "" {
+		uploadPath = "./uploads" // 默认值
+	}
+	attachmentStorage := storage.NewLocalStorage(uploadPath, logger.Logger)
+
+	// 2. 创建文件验证器
+	fileValidator := storage.NewFileValidator(logger.Logger)
+
+	// 3. 创建缩略图生成器
+	thumbnailGenerator := storage.NewThumbnailGenerator(logger.Logger)
+
+	// 4. 创建附件存储配置
+	attachmentStorageConfig := &attachmentRepo.AttachmentStorageConfig{
+		Type:        c.cfg.Storage.Type,
+		LocalPath:   uploadPath,
+		MaxFileSize: 100 * 1024 * 1024, // 100MB
+		AllowedTypes: []string{
+			"image/jpeg", "image/png", "image/gif", "image/webp",
+			"application/pdf",
+			"application/msword",
+			"application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+			"application/vnd.ms-excel",
+			"application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+			"text/plain", "text/csv",
+		},
+	}
+
+	// 5. 创建缩略图配置
+	thumbnailConfig := &attachmentRepo.ThumbnailConfig{
+		Enabled:     true,
+		SmallWidth:  150,
+		SmallHeight: 150,
+		LargeWidth:  800,
+		LargeHeight: 800,
+		Quality:     85,
+		Format:      "jpeg",
+	}
+
+	// 6. 创建附件服务
+	c.attachmentService = attachmentRepo.NewService(
+		c.attachmentRepository,
+		c.uploadTokenRepository,
+		attachmentStorage,
+		thumbnailGenerator,
+		fileValidator,
+		attachmentStorageConfig,
+		thumbnailConfig,
+		logger.Logger,
+	)
+
+	logger.Info("✅ 附件服务已初始化")
 }
 
 // initCalculationServices 初始化模块化计算服务
@@ -537,6 +661,11 @@ func (c *Container) ViewService() *application.ViewService {
 	return c.viewService
 }
 
+// AttachmentService 获取附件服务 ✨
+func (c *Container) AttachmentService() attachmentRepo.Service {
+	return c.attachmentService
+}
+
 // CalculationService 获取计算服务 ✨
 func (c *Container) CalculationService() *application.CalculationService {
 	return c.calculationService
@@ -642,13 +771,15 @@ func (c *Container) initInfrastructureServices() {
 		c.errorService,
 	)
 
-	// 缓存服务
-	cacheConfig := application.DefaultCacheConfig()
-	c.cacheService = application.NewCacheService(
-		c.cacheClient,
-		c.errorService,
-		cacheConfig,
-	)
+	// 缓存服务（如果还未初始化，则初始化）
+	if c.cacheService == nil {
+		cacheConfig := application.DefaultCacheConfig()
+		c.cacheService = application.NewCacheService(
+			c.cacheClient,
+			c.errorService,
+			cacheConfig,
+		)
+	}
 
 	// 事件存储
 	c.eventStore = application.NewEventStore(
@@ -808,7 +939,7 @@ func (c *Container) initShareDB(logger *zap.Logger) {
 	if c.recordService != nil {
 		c.recordService.SetShareDBService(c.realtimeManager.GetShareDBService())
 		logger.Info("✅ RecordService ShareDB 服务已设置")
-		
+
 		// 创建并设置 RecordBroadcaster
 		shareDBService := c.realtimeManager.GetShareDBService()
 		if shareDBService != nil {

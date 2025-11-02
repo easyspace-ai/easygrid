@@ -163,22 +163,29 @@ func (h *BaseHandler) GetBaseTables(c *gin.Context) {
 func (h *BaseHandler) DuplicateBase(c *gin.Context) {
 	baseID := c.Param("baseId")
 
-	// 参数绑定
-	var req struct {
-		Name        string `json:"name"`
-		Description string `json:"description,omitempty"`
-		WithData    bool   `json:"withData"` // 是否复制数据
-	}
-
+	// 1. 参数绑定
+	var req dto.DuplicateBaseRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
 		response.Error(c, errors.ErrBadRequest.WithDetails(err.Error()))
 		return
 	}
 
-	// TODO: 调用BaseService.DuplicateBase
-	_ = baseID
-	_ = req
-	response.Error(c, errors.ErrNotImplemented.WithDetails("Base复制功能正在开发中"))
+	// 2. 获取用户ID
+	_, exists := authctx.UserFrom(c.Request.Context())
+	if !exists {
+		response.Error(c, errors.ErrUnauthorized)
+		return
+	}
+
+	// 3. 调用服务
+	result, err := h.service.DuplicateBase(c.Request.Context(), baseID, &req)
+	if err != nil {
+		response.Error(c, err)
+		return
+	}
+
+	// 4. 返回成功响应
+	response.Success(c, result, "Base复制成功")
 }
 
 // GetBaseCollaborators 获取Base协作者列表
@@ -259,3 +266,4 @@ func (h *BaseHandler) GetBasePermission(c *gin.Context) {
 
 	response.Success(c, permission, "获取权限成功")
 }
+

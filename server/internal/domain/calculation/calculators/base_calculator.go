@@ -33,4 +33,3 @@ func (bc *BaseCalculator) GetFieldValues(record map[string]interface{}, fieldIDs
 	}
 	return values
 }
-

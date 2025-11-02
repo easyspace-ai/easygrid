@@ -147,6 +147,14 @@ func (s *service) UploadFile(ctx context.Context, token string, reader io.Reader
 	// 生成文件路径
 	filePath := s.generateFilePath(uploadToken, filename)
 
+	s.logger.Info("UploadFile: uploading file",
+		logger.String("token", token),
+		logger.String("file_path", filePath),
+		logger.String("filename", filename),
+		logger.Int64("size", size),
+		logger.String("token_created_time", uploadToken.CreatedTime.Format("2006/01/02")),
+	)
+
 	// 上传文件到存储
 	if err := s.storage.Upload(ctx, filePath, reader, size, mimeType); err != nil {
 		s.logger.Error("Failed to upload file to storage",
@@ -188,6 +196,13 @@ func (s *service) NotifyUpload(ctx context.Context, token, filename string) (*No
 
 	// 生成文件路径
 	filePath := s.generateFilePath(uploadToken, filename)
+
+	s.logger.Info("NotifyUpload: checking file existence",
+		logger.String("token", token),
+		logger.String("file_path", filePath),
+		logger.String("filename", filename),
+		logger.String("token_created_time", uploadToken.CreatedTime.Format("2006/01/02")),
+	)
 
 	// 检查文件是否存在
 	exists, err := s.storage.Exists(ctx, filePath)
@@ -460,11 +475,16 @@ func (s *service) CleanupExpiredTokens(ctx context.Context) error {
 
 // generateFilePath 生成文件路径
 func (s *service) generateFilePath(token *UploadToken, filename string) string {
-	// 生成基于时间戳的路径
-	now := time.Now()
-	datePath := now.Format("2006/01/02")
+	// 使用 token 的创建时间来生成日期路径，确保同一 token 的所有调用都生成相同的路径
+	// 这样可以避免 UploadFile 和 NotifyUpload 使用不同时间导致路径不一致的问题
+	datePath := token.CreatedTime.Format("2006/01/02")
 
 	// 生成唯一文件名
+	// 如果 filename 为空，使用 token 的前8位作为文件名
+	if filename == "" {
+		filename = fmt.Sprintf("file_%s", token.Token[:8])
+	}
+	
 	ext := filepath.Ext(filename)
 	name := strings.TrimSuffix(filename, ext)
 	uniqueName := fmt.Sprintf("%s_%s%s", name, token.Token[:8], ext)

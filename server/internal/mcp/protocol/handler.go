@@ -65,7 +65,8 @@ func (r *Router) Handle(ctx context.Context, req *MCPRequest) (*MCPResponse, err
 		}
 
 		// 其他错误转换为内部错误
-		log.Printf("Handler error for method %s: %v", req.Method, err)
+		// TODO: 添加结构化日志记录器
+		// logger.Error("Handler error", zap.String("method", req.Method), zap.Error(err))
 		return NewMCPErrorResponse(req.ID, ErrorCodeInternalError, "Internal server error", map[string]string{
 			"method": req.Method,
 			"error":  err.Error(),
@@ -263,7 +264,8 @@ func NewErrorHandler(handler Handler) *ErrorHandler {
 func (h *ErrorHandler) Handle(ctx context.Context, req *MCPRequest) (*MCPResponse, error) {
 	defer func() {
 		if r := recover(); r != nil {
-			log.Printf("Panic in MCP handler: %v", r)
+			// TODO: 添加结构化日志记录器
+			// logger.Error("Panic in MCP handler", zap.Any("panic", r))
 		}
 	}()
 

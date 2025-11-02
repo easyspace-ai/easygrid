@@ -14,8 +14,8 @@ import (
 	"github.com/easyspace-ai/luckdb/server/internal/events"
 	"github.com/easyspace-ai/luckdb/server/pkg/errors"
 	"github.com/easyspace-ai/luckdb/server/pkg/monitoring"
-	"github.com/easyspace-ai/luckdb/server/pkg/sharedb/opbuilder"
 	"github.com/easyspace-ai/luckdb/server/pkg/sharedb"
+	"github.com/easyspace-ai/luckdb/server/pkg/sharedb/opbuilder"
 	"github.com/gin-gonic/gin"
 	"github.com/gorilla/websocket"
 	"go.uber.org/zap"
@@ -58,7 +58,7 @@ func NewService(adapter Adapter, pubsub PubSub, presence PresenceManager, logger
 	// 创建性能监控器
 	perfMonitor := monitoring.NewPerformanceMonitor(logger)
 	perfMiddleware := monitoring.NewPerformanceMiddleware(perfMonitor, logger)
-	
+
 	// 启动定期日志记录
 	perfMonitor.StartPeriodicLogging(30 * time.Second)
 
@@ -101,6 +101,17 @@ func (s *ShareDBService) cleanupConnection(conn *websocket.Conn, connection *Con
 		return
 	}
 
+	// 取消所有订阅
+	connection.mu.Lock()
+	for channel, cancel := range connection.subCancelFuncs {
+		s.logger.Debug("取消订阅",
+			zap.String("connection_id", connection.ID),
+			zap.String("channel", channel))
+		cancel()
+	}
+	connection.subCancelFuncs = nil
+	connection.mu.Unlock()
+
 	// 标记连接为非活跃状态
 	connection.IsActive = false
 	connection.LastSeen = time.Now()
@@ -112,8 +123,8 @@ func (s *ShareDBService) cleanupConnection(conn *websocket.Conn, connection *Con
 	// 关闭 WebSocket 连接
 	if conn != nil {
 		// 发送关闭帧
-		conn.WriteControl(websocket.CloseMessage, 
-			websocket.FormatCloseMessage(websocket.CloseNormalClosure, "Connection cleanup"), 
+		conn.WriteControl(websocket.CloseMessage,
+			websocket.FormatCloseMessage(websocket.CloseNormalClosure, "Connection cleanup"),
 			time.Now().Add(time.Second))
 		conn.Close()
 	}
@@ -144,14 +155,14 @@ func (s *ShareDBService) logConnectionMetrics(event string, connectionID, userID
 // validateConnectionLimits 验证连接限制
 func (s *ShareDBService) validateConnectionLimits(userID string) error {
 	const (
-		maxConnectionsPerUser = 50  // 每个用户最大连接数（开发环境放宽限制）
+		maxConnectionsPerUser = 50   // 每个用户最大连接数（开发环境放宽限制）
 		maxTotalConnections   = 1000 // 总最大连接数
 	)
 
 	// 统计当前连接数
 	totalConnections := 0
 	userConnections := 0
-	
+
 	s.connections.Range(func(key, value interface{}) bool {
 		if conn, ok := value.(*Connection); ok && conn.IsActive {
 			totalConnections++
@@ -220,36 +231,37 @@ func (s *ShareDBService) HandleWebSocket(c *gin.Context) {
 			zap.String("connection_header", c.Request.Header.Get("Connection")),
 			zap.String("upgrade_header", c.Request.Header.Get("Upgrade")))
 	} else {
-		s.logger.Info("WebSocket 连接已验证", 
+		s.logger.Info("WebSocket 连接已验证",
 			zap.String("user_id", userID),
 			zap.String("connection_header", c.Request.Header.Get("Connection")),
 			zap.String("upgrade_header", c.Request.Header.Get("Upgrade")))
 	}
-	
+
 	// 连接限制检查
 	if err := s.validateConnectionLimits(userID); err != nil {
 		s.logger.Warn("Connection rejected due to limits",
 			zap.String("user_id", userID),
 			zap.Error(err))
-		conn.WriteControl(websocket.CloseMessage, 
-			websocket.FormatCloseMessage(websocket.ClosePolicyViolation, "Connection limit exceeded"), 
+		conn.WriteControl(websocket.CloseMessage,
+			websocket.FormatCloseMessage(websocket.ClosePolicyViolation, "Connection limit exceeded"),
 			time.Now().Add(time.Second))
 		conn.Close()
 		return
 	}
-		
+
 	connection := &Connection{
-		ID:       generateConnectionID(),
-		UserID:   userID, // 从中间件获取用户ID
-		LastSeen: time.Now(),
-		IsActive: true,
-		CreatedAt: time.Now(), // 记录连接创建时间用于超时检查
+		ID:            generateConnectionID(),
+		UserID:        userID, // 从中间件获取用户ID
+		LastSeen:      time.Now(),
+		IsActive:      true,
+		CreatedAt:     time.Now(), // 记录连接创建时间用于超时检查
+		subCancelFuncs: make(map[string]context.CancelFunc),
 	}
 
 	// 注册连接
 	s.connections.Store(connection.ID, connection)
 	s.wsConnections.Store(connection.ID, conn)
-	
+
 	// 确保在所有退出路径上都进行清理
 	defer func() {
 		s.cleanupConnection(conn, connection)
@@ -258,7 +270,7 @@ func (s *ShareDBService) HandleWebSocket(c *gin.Context) {
 	s.logger.Info("ShareDB WebSocket connection established",
 		zap.String("connection_id", connection.ID),
 		zap.String("user_id", connection.UserID))
-	
+
 	// 记录连接建立时的指标
 	s.logConnectionMetrics("connection_established", connection.ID, connection.UserID)
 
@@ -277,11 +289,11 @@ func (s *ShareDBService) HandleWebSocket(c *gin.Context) {
 	// 创建 done channel 用于控制 ping goroutine 的生命周期
 	pingDone := make(chan struct{})
 	defer close(pingDone)
-	
+
 	// 启动 ping 协程
 	pingTicker := time.NewTicker(30 * time.Second)
 	defer pingTicker.Stop()
-	
+
 	go func() {
 		defer func() {
 			if r := recover(); r != nil {
@@ -290,7 +302,7 @@ func (s *ShareDBService) HandleWebSocket(c *gin.Context) {
 					zap.String("connection_id", connection.ID))
 			}
 		}()
-		
+
 		for {
 			select {
 			case <-pingTicker.C:
@@ -324,7 +336,7 @@ func (s *ShareDBService) handleConnection(conn *websocket.Conn, connection *Conn
 				zap.Any("panic", r),
 				zap.String("connection_id", connection.ID),
 				zap.String("user_id", connection.UserID))
-			
+
 			// 立即清理连接资源并退出
 			s.cleanupConnection(conn, connection)
 			return
@@ -340,7 +352,7 @@ func (s *ShareDBService) handleConnection(conn *websocket.Conn, connection *Conn
 
 		// 设置读取超时
 		conn.SetReadDeadline(time.Now().Add(60 * time.Second))
-		
+
 		// 读取消息 - 添加panic恢复
 		var data []byte
 		var err error
@@ -355,7 +367,7 @@ func (s *ShareDBService) handleConnection(conn *websocket.Conn, connection *Conn
 			}()
 			_, data, err = conn.ReadMessage()
 		}()
-		
+
 		if err != nil {
 			// 检查是否是超时错误
 			if netErr, ok := err.(net.Error); ok && netErr.Timeout() {
@@ -370,7 +382,7 @@ func (s *ShareDBService) handleConnection(conn *websocket.Conn, connection *Conn
 				}
 				continue
 			}
-			
+
 			// 检查是否是正常的关闭错误
 			if websocket.IsCloseError(err, websocket.CloseNormalClosure, websocket.CloseGoingAway, websocket.CloseNoStatusReceived) {
 				s.logger.Info("ShareDB WebSocket connection closed normally",
@@ -378,18 +390,18 @@ func (s *ShareDBService) handleConnection(conn *websocket.Conn, connection *Conn
 					zap.String("error", err.Error()))
 				break
 			}
-			
+
 			// 检查是否是连接重置或管道破裂错误
-			if strings.Contains(err.Error(), "connection reset") || 
-			   strings.Contains(err.Error(), "broken pipe") ||
-			   strings.Contains(err.Error(), "use of closed network connection") ||
-			   strings.Contains(err.Error(), "repeated read on failed websocket connection") {
+			if strings.Contains(err.Error(), "connection reset") ||
+				strings.Contains(err.Error(), "broken pipe") ||
+				strings.Contains(err.Error(), "use of closed network connection") ||
+				strings.Contains(err.Error(), "repeated read on failed websocket connection") {
 				s.logger.Debug("WebSocket connection lost (client disconnected)",
 					zap.String("connection_id", connection.ID),
 					zap.String("error", err.Error()))
 				break
 			}
-			
+
 			// 其他错误
 			s.logger.Error("ShareDB WebSocket connection error",
 				zap.Error(err),
@@ -411,17 +423,17 @@ func (s *ShareDBService) handleConnection(conn *websocket.Conn, connection *Conn
 		if err := s.handleMessage(conn, connection, &msg); err != nil {
 			// 检查是否是连接丢失错误
 			if strings.Contains(err.Error(), "broken pipe") ||
-			   strings.Contains(err.Error(), "connection reset") ||
-			   strings.Contains(err.Error(), "use of closed network connection") ||
-			   strings.Contains(err.Error(), "connection lost") {
-				s.logger.Debug("ShareDB connection lost (client disconnected)", 
+				strings.Contains(err.Error(), "connection reset") ||
+				strings.Contains(err.Error(), "use of closed network connection") ||
+				strings.Contains(err.Error(), "connection lost") {
+				s.logger.Debug("ShareDB connection lost (client disconnected)",
 					zap.String("connection_id", connection.ID),
 					zap.String("error", err.Error()))
 				break
 			}
-			
+
 			s.logger.Error("Failed to handle ShareDB message", zap.Error(err))
-			
+
 			// 发送错误响应
 			s.sendError(conn, &msg, errors.NewShareDBError("SERVER_ERROR", err.Error()))
 		}
@@ -462,7 +474,7 @@ func (s *ShareDBService) handleMessage(conn *websocket.Conn, connection *Connect
 func (s *ShareDBService) handleHandshake(conn *websocket.Conn, connection *Connection, msg *Message) error {
 	// 发送握手响应 - ShareDB 客户端期望直接包含 protocol 和 type 字段
 	response := Message{
-		Action: "hs",
+		Action:   "hs",
 		Protocol: 1, // ShareDB 客户端期望数字版本
 		Type:     "json0",
 		ID:       connection.ID,
@@ -492,9 +504,37 @@ func (s *ShareDBService) handleFetch(conn *websocket.Conn, connection *Connectio
 func (s *ShareDBService) handleSubscribe(conn *websocket.Conn, connection *Connection, msg *Message) error {
 	// 订阅文档
 	channel := msg.Collection + "." + msg.DocID
+	collection := msg.Collection
+	docID := msg.DocID
+
+	s.logger.Info("处理订阅请求",
+		zap.String("connection_id", connection.ID),
+		zap.String("collection", collection),
+		zap.String("docID", docID),
+		zap.String("channel", channel))
+
+	// 为每个连接创建独立的 context，当连接断开时取消订阅
+	subCtx, cancel := context.WithCancel(s.ctx)
+	
+	// 存储 cancel 函数，以便在连接断开时取消订阅
+	connection.mu.Lock()
+	if connection.subCancelFuncs == nil {
+		connection.subCancelFuncs = make(map[string]context.CancelFunc)
+	}
+	// 如果已经订阅过这个 channel，先取消之前的订阅
+	if oldCancel, exists := connection.subCancelFuncs[channel]; exists {
+		oldCancel()
+	}
+	connection.subCancelFuncs[channel] = cancel
+	connection.mu.Unlock()
 
 	// 订阅操作更新
-	if err := s.pubsub.Subscribe(s.ctx, channel, func(op *opbuilder.Operation) {
+	if err := s.pubsub.Subscribe(subCtx, channel, func(op *opbuilder.Operation) {
+		s.logger.Info("收到 PubSub 操作",
+			zap.String("connection_id", connection.ID),
+			zap.String("channel", channel),
+			zap.Int("op_path_len", len(op.Path)))
+
 		// 检查连接是否还活着
 		if !s.isConnectionAlive(conn) {
 			s.logger.Debug("Connection is dead, skipping message send",
@@ -502,21 +542,41 @@ func (s *ShareDBService) handleSubscribe(conn *websocket.Conn, connection *Conne
 				zap.String("channel", channel))
 			return
 		}
-		
+
 		// 发送操作到客户端
-		response := Message{
-			Action:     "op",
-			Collection: msg.Collection,
-			DocID:      msg.DocID,
-			Op:         msg.Op,
-			Version:    msg.Version,
+		// op.Path 的结构是 []interface{}{[]OTOperation}，需要提取操作数组
+		var ops []OTOperation
+		if len(op.Path) > 0 {
+			if opsArray, ok := op.Path[0].([]OTOperation); ok {
+				ops = opsArray
+			} else if opsInterface, ok := op.Path[0].([]interface{}); ok {
+				// 兼容处理：如果是 []interface{}，尝试转换
+				for _, opItem := range opsInterface {
+					if otOp, ok := opItem.(map[string]interface{}); ok {
+						ops = append(ops, OTOperation(otOp))
+					}
+				}
+			}
 		}
 		
+		response := Message{
+			Action:     "op",
+			Collection: collection,
+			DocID:      docID,
+			Op:         ops,
+			Version:    0, // 版本号会在后续从数据库获取
+		}
+
+		s.logger.Info("向客户端发送操作",
+			zap.String("connection_id", connection.ID),
+			zap.String("channel", channel),
+			zap.Int("ops_count", len(ops)))
+
 		if err := s.sendMessage(conn, &response); err != nil {
 			// 连接丢失错误는 Debug 级别로 처리
 			if strings.Contains(err.Error(), "connection lost") ||
-			   strings.Contains(err.Error(), "broken pipe") ||
-			   strings.Contains(err.Error(), "connection reset") {
+				strings.Contains(err.Error(), "broken pipe") ||
+				strings.Contains(err.Error(), "connection reset") {
 				s.logger.Debug("Connection lost while sending operation",
 					zap.String("connection_id", connection.ID),
 					zap.String("channel", channel))
@@ -525,19 +585,52 @@ func (s *ShareDBService) handleSubscribe(conn *websocket.Conn, connection *Conne
 					zap.Error(err),
 					zap.String("channel", channel))
 			}
+		} else {
+			s.logger.Debug("操作已成功发送到客户端",
+				zap.String("connection_id", connection.ID),
+				zap.String("channel", channel))
 		}
 	}); err != nil {
+		s.logger.Error("订阅失败",
+			zap.Error(err),
+			zap.String("channel", channel))
+		// 清理 cancel 函数
+		connection.mu.Lock()
+		delete(connection.subCancelFuncs, channel)
+		connection.mu.Unlock()
+		cancel()
 		return err
 	}
 
+	s.logger.Info("订阅成功",
+		zap.String("connection_id", connection.ID),
+		zap.String("channel", channel))
+
 	// 获取文档当前状态
+	// PostgresAdapter.GetSnapshot 期望 collection 字符串，它会内部解析
+	s.logger.Debug("获取文档快照",
+		zap.String("collection", msg.Collection),
+		zap.String("doc_id", msg.DocID))
+	
 	snapshot, err := s.adapter.GetSnapshot(s.ctx, msg.Collection, msg.DocID, nil)
 	if err != nil {
-		s.logger.Error("获取文档快照失败",
+		s.logger.Warn("获取文档快照失败，返回空数据（记录可能尚未创建）",
 			zap.Error(err),
 			zap.String("collection", msg.Collection),
 			zap.String("doc_id", msg.DocID))
-		return err
+		// 即使获取失败，也发送一个空数据，确保客户端收到 load 事件
+		// 这样可以支持客户端先订阅，后创建数据的场景
+		response := Message{
+			Action:     "s",
+			Collection: msg.Collection,
+			DocID:      msg.DocID,
+			Data:       map[string]interface{}{"data": map[string]interface{}{}}, // 返回格式化的空数据
+			Version:    0,
+		}
+		if sendErr := s.sendMessage(conn, &response); sendErr != nil {
+			return sendErr
+		}
+		return nil // 不返回错误，允许继续订阅
 	}
 
 	// 发送订阅确认，包含文档数据和版本
@@ -548,6 +641,14 @@ func (s *ShareDBService) handleSubscribe(conn *websocket.Conn, connection *Conne
 		Data:       snapshot.Data,
 		Version:    snapshot.Version,
 	}
+	
+	s.logger.Debug("发送订阅确认",
+		zap.String("connection_id", connection.ID),
+		zap.String("collection", msg.Collection),
+		zap.String("doc_id", msg.DocID),
+		zap.Any("data", snapshot.Data),
+		zap.Int64("version", snapshot.Version))
+	
 	return s.sendMessage(conn, &response)
 }
 
@@ -555,11 +656,11 @@ func (s *ShareDBService) handleSubscribe(conn *websocket.Conn, connection *Conne
 func (s *ShareDBService) handleUnsubscribe(conn *websocket.Conn, connection *Connection, msg *Message) error {
 	// 取消订阅文档
 	channel := msg.Collection + "." + msg.DocID
-	
+
 	s.logger.Info("处理取消订阅请求",
 		zap.String("connection_id", connection.ID),
 		zap.String("channel", channel))
-	
+
 	// 取消订阅操作更新
 	if err := s.pubsub.Unsubscribe(s.ctx, channel); err != nil {
 		s.logger.Error("取消订阅失败",
@@ -567,7 +668,7 @@ func (s *ShareDBService) handleUnsubscribe(conn *websocket.Conn, connection *Con
 			zap.String("channel", channel))
 		return err
 	}
-	
+
 	// 发送取消订阅确认
 	response := Message{
 		Action:     "us",
@@ -582,7 +683,7 @@ func (s *ShareDBService) handleOperation(conn *websocket.Conn, connection *Conne
 	// 添加 panic 恢复机制
 	defer func() {
 		if r := recover(); r != nil {
-			s.logger.Error("处理操作时发生 panic", 
+			s.logger.Error("处理操作时发生 panic",
 				zap.Any("panic", r),
 				zap.String("collection", msg.Collection),
 				zap.String("docID", msg.DocID))
@@ -598,12 +699,12 @@ func (s *ShareDBService) handleOperation(conn *websocket.Conn, connection *Conne
 
 // doHandleOperation 实际的操作处理逻辑
 func (s *ShareDBService) doHandleOperation(conn *websocket.Conn, connection *Connection, msg *Message) error {
-	s.logger.Info("处理 ShareDB 操作", 
+	s.logger.Info("处理 ShareDB 操作",
 		zap.String("collection", msg.Collection),
 		zap.String("docID", msg.DocID),
 		zap.Int64("version", msg.Version),
 		zap.Int("opCount", len(msg.Op)))
-	
+
 	// 基本验证
 	if len(msg.Op) == 0 {
 		s.logger.Error("操作列表为空")
@@ -624,16 +725,16 @@ func (s *ShareDBService) doHandleOperation(conn *websocket.Conn, connection *Con
 	}
 
 	// 发布操作
-	s.logger.Info("开始发布操作", 
+	s.logger.Info("开始发布操作",
 		zap.String("collection", msg.Collection),
 		zap.String("docID", msg.DocID),
 		zap.Int64("version", msg.Version))
-		
+
 	if err := s.PublishOp(s.ctx, msg.Collection, msg.DocID, op); err != nil {
 		s.logger.Error("发布操作失败", zap.Error(err))
 		return err
 	}
-	
+
 	s.logger.Info("操作发布成功")
 
 	// 发送操作确认响应
@@ -644,12 +745,12 @@ func (s *ShareDBService) doHandleOperation(conn *websocket.Conn, connection *Con
 		Version:    msg.Version,
 		Op:         msg.Op,
 	}
-	
-	s.logger.Debug("发送操作确认响应", 
+
+	s.logger.Debug("发送操作确认响应",
 		zap.String("collection", msg.Collection),
 		zap.String("docID", msg.DocID),
 		zap.Int64("version", msg.Version))
-	
+
 	return s.sendMessage(conn, response)
 }
 
@@ -697,13 +798,13 @@ func (s *ShareDBService) handlePresence(conn *websocket.Conn, connection *Connec
 func (s *ShareDBService) SubmitOp(ctx context.Context, collection, docID string, op *opbuilder.Operation) error {
 	// 获取或创建事务上下文
 	txCtx := sharedb.GetOrCreateTransactionContext(ctx)
-	
+
 	// 将操作添加到事务上下文中
 	opMap := map[string]opbuilder.Operation{
 		docID: *op,
 	}
 	txCtx.AddRawOpMap(opMap)
-	
+
 	s.logger.Info("Operation submitted",
 		zap.String("collection", collection),
 		zap.String("doc_id", docID),
@@ -726,12 +827,12 @@ func (s *ShareDBService) WithTransaction(fn func(context.Context) error) error {
 	// 创建新的事务上下文
 	txCtx := sharedb.NewTransactionContext()
 	ctx := sharedb.WithTransactionContext(context.Background(), txCtx)
-	
+
 	// 执行业务逻辑
 	if err := fn(ctx); err != nil {
 		return err
 	}
-	
+
 	// 事务提交后发布所有操作
 	return s.publishOpsInTransaction(txCtx)
 }
@@ -741,14 +842,14 @@ func (s *ShareDBService) publishOpsInTransaction(txCtx *sharedb.TransactionConte
 	if txCtx.IsEmpty() {
 		return nil
 	}
-	
+
 	// 发布所有原始操作映射
 	for _, opMap := range txCtx.GetRawOpMaps() {
 		for docID, op := range opMap {
 			// 这里需要从操作中提取 collection 信息
 			// 暂时使用默认的 collection 格式
 			collection := "rec_" + docID // 这里需要根据实际情况调整
-			
+
 			if err := s.PublishOp(context.Background(), collection, docID, &op); err != nil {
 				s.logger.Error("Failed to publish operation in transaction",
 					zap.String("collection", collection),
@@ -758,7 +859,7 @@ func (s *ShareDBService) publishOpsInTransaction(txCtx *sharedb.TransactionConte
 			}
 		}
 	}
-	
+
 	// 清理缓存键
 	cacheKeys := txCtx.GetCacheKeys()
 	if len(cacheKeys) > 0 {
@@ -766,30 +867,43 @@ func (s *ShareDBService) publishOpsInTransaction(txCtx *sharedb.TransactionConte
 		// 这里可以调用缓存清理逻辑
 		// s.cacheService.ClearKeys(cacheKeys)
 	}
-	
+
 	// 清空事务上下文
 	txCtx.Clear()
-	
+
 	return nil
 }
 
 // PublishOp 发布操作（对齐 Teable）
 func (s *ShareDBService) PublishOp(ctx context.Context, collection, docID string, op *opbuilder.Operation) error {
 	// 直接发布到 pubsub
-	
+
 	channels := []string{
-		collection,                    // 广播到整个 collection (rec_tableId)
-		collection + "." + docID,      // 广播到特定文档 (rec_tableId.recordId)
+		collection,               // 广播到整个 collection (rec_tableId)
+		collection + "." + docID, // 广播到特定文档 (rec_tableId.recordId)
 	}
-	
-	s.logger.Debug("发布 ShareDB 操作", 
+
+	s.logger.Info("发布 ShareDB 操作",
+		zap.String("collection", collection),
+		zap.String("docID", docID),
+		zap.Strings("channels", channels),
+		zap.Int("op_path_len", len(op.Path)))
+
+	if err := s.pubsub.Publish(ctx, channels, op); err != nil {
+		s.logger.Error("PubSub 发布失败",
+			zap.Error(err),
+			zap.String("collection", collection),
+			zap.String("docID", docID))
+		return err
+	}
+
+	s.logger.Info("ShareDB 操作发布成功",
 		zap.String("collection", collection),
 		zap.String("docID", docID),
 		zap.Strings("channels", channels))
-	
-	return s.pubsub.Publish(ctx, channels, op)
-}
 
+	return nil
+}
 
 // isConnectionAlive 检查连接是否还活着
 func (s *ShareDBService) isConnectionAlive(conn *websocket.Conn) bool {
@@ -803,27 +917,27 @@ func (s *ShareDBService) sendMessage(conn *websocket.Conn, msg *Message) error {
 	// 使用互斥锁保护 WebSocket 写入，避免并发写入
 	s.writeMutex.Lock()
 	defer s.writeMutex.Unlock()
-	
+
 	data, err := json.Marshal(msg)
 	if err != nil {
 		return err
 	}
-	
+
 	// 设置写入超时
 	conn.SetWriteDeadline(time.Now().Add(10 * time.Second))
-	
+
 	err = conn.WriteMessage(websocket.TextMessage, data)
 	if err != nil {
 		// 检查是否是连接相关的错误
 		if strings.Contains(err.Error(), "broken pipe") ||
-		   strings.Contains(err.Error(), "connection reset") ||
-		   strings.Contains(err.Error(), "use of closed network connection") ||
-		   strings.Contains(err.Error(), "repeated read on failed websocket connection") {
+			strings.Contains(err.Error(), "connection reset") ||
+			strings.Contains(err.Error(), "use of closed network connection") ||
+			strings.Contains(err.Error(), "repeated read on failed websocket connection") {
 			return fmt.Errorf("connection lost: %w", err)
 		}
 		return err
 	}
-	
+
 	return nil
 }
 
@@ -950,7 +1064,7 @@ func (s *ShareDBService) cleanupInactiveConnections() {
 		}
 		return true
 	})
-	
+
 	if cleanedCount > 0 {
 		s.logger.Info("Connection cleanup completed",
 			zap.Int("cleaned_connections", cleanedCount))
@@ -967,7 +1081,7 @@ func (s *ShareDBService) ForceCleanupAllConnections() {
 		cleanedCount++
 		return true
 	})
-	
+
 	s.logger.Info("Force cleanup all connections completed",
 		zap.Int("cleaned_connections", cleanedCount))
 }
@@ -999,7 +1113,7 @@ func (s *ShareDBService) handlePresencePing(conn *websocket.Conn, connection *Co
 // BroadcastOperation 广播ShareDB操作到所有连接的客户端
 func (s *ShareDBService) BroadcastOperation(tableID, recordID string, ops []OTOperation) error {
 	collection := fmt.Sprintf("rec_%s", tableID)
-	
+
 	// 创建操作消息
 	msg := Message{
 		Action:     "op",
@@ -1008,15 +1122,15 @@ func (s *ShareDBService) BroadcastOperation(tableID, recordID string, ops []OTOp
 		Op:         ops,
 		Version:    1, // 版本号，实际应该从数据库获取
 	}
-	
+
 	// 广播到所有连接的客户端
 	count := 0
 	s.wsConnections.Range(func(key, value interface{}) bool {
 		connID := key.(string)
 		conn := value.(*websocket.Conn)
-		
+
 		if err := s.sendMessage(conn, &msg); err != nil {
-			s.logger.Debug("广播操作失败", 
+			s.logger.Debug("广播操作失败",
 				zap.String("connection_id", connID),
 				zap.Error(err))
 		} else {
@@ -1024,11 +1138,11 @@ func (s *ShareDBService) BroadcastOperation(tableID, recordID string, ops []OTOp
 		}
 		return true
 	})
-	
+
 	s.logger.Info("ShareDB操作已广播",
 		zap.String("collection", collection),
 		zap.String("doc_id", recordID),
 		zap.Int("connections", count))
-	
+
 	return nil
 }

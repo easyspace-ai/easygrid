@@ -94,6 +94,21 @@ func Error(c *gin.Context, err error) {
 		details = appErr.Details
 	}
 
+	// 确保响应头已设置
+	if c.Writer.Written() {
+		return // 响应已写入，避免重复写入
+	}
+
+	// 使用 defer recover 捕获 JSON 序列化时的 panic
+	defer func() {
+		if r := recover(); r != nil {
+			// 如果 JSON 序列化失败，尝试写入纯文本错误
+			if !c.Writer.Written() {
+				c.String(http.StatusInternalServerError, "服务器内部错误: JSON序列化失败")
+			}
+		}
+	}()
+
 	c.JSON(httpStatus, APIResponse{
 		Code:    code,
 		Message: message,

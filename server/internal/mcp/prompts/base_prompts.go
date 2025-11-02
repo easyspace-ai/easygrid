@@ -123,4 +123,3 @@ func validateOptionalString(arguments map[string]interface{}, key string) (strin
 
 	return str, nil
 }
-

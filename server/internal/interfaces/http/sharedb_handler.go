@@ -77,9 +77,9 @@ func (h *ShareDBHandler) ForceCleanupConnections(c *gin.Context) {
 
 	// 强制清理所有连接
 	h.service.ForceCleanupAllConnections()
-	
+
 	c.JSON(http.StatusOK, gin.H{
-		"message": "All connections have been cleaned up",
+		"message":   "All connections have been cleaned up",
 		"timestamp": time.Now().Format(time.RFC3339),
 	})
 }

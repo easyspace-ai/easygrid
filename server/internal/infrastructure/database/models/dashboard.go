@@ -20,5 +20,3 @@ type Dashboard struct {
 func (Dashboard) TableName() string {
 	return "dashboard"
 }
-
-

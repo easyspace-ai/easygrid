@@ -135,7 +135,7 @@ func (s *WorkflowService) StopRun(ctx context.Context, runID string) error {
 		Model(&models.WorkflowRun{}).
 		Where("id = ?", runID).
 		Updates(map[string]interface{}{
-			"status":      "stopped",
+			"status":       "stopped",
 			"completed_at": &now,
 		}).Error
 }
@@ -166,4 +166,3 @@ func (s *WorkflowService) GetStats(ctx context.Context, workflowID string) (map[
 		"success_rate": successRate,
 	}, nil
 }
-

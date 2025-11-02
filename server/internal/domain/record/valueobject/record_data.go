@@ -20,13 +20,13 @@ func NewRecordData(values map[string]interface{}) (RecordData, error) {
 	if values == nil {
 		values = make(map[string]interface{})
 	}
-	
+
 	// 计算哈希
 	hash, err := calculateHash(values)
 	if err != nil {
 		return RecordData{}, err
 	}
-	
+
 	return RecordData{
 		values: values,
 		hash:   hash,
@@ -45,7 +45,7 @@ func (rd RecordData) GetString(fieldName string) (string, bool) {
 	if !exists {
 		return "", false
 	}
-	
+
 	str, ok := value.(string)
 	return str, ok
 }
@@ -56,7 +56,7 @@ func (rd RecordData) GetInt(fieldName string) (int64, bool) {
 	if !exists {
 		return 0, false
 	}
-	
+
 	switch v := value.(type) {
 	case int64:
 		return v, true
@@ -75,7 +75,7 @@ func (rd RecordData) GetFloat(fieldName string) (float64, bool) {
 	if !exists {
 		return 0, false
 	}
-	
+
 	switch v := value.(type) {
 	case float64:
 		return v, true
@@ -96,7 +96,7 @@ func (rd RecordData) Set(fieldName string, value interface{}) (RecordData, error
 		newValues[k] = v
 	}
 	newValues[fieldName] = value
-	
+
 	return NewRecordData(newValues)
 }
 
@@ -109,24 +109,24 @@ func (rd RecordData) Delete(fieldName string) (RecordData, error) {
 			newValues[k] = v
 		}
 	}
-	
+
 	return NewRecordData(newValues)
 }
 
 // Merge 合并数据（返回新的RecordData）
 func (rd RecordData) Merge(other RecordData) (RecordData, error) {
 	newValues := make(map[string]interface{})
-	
+
 	// 复制当前值
 	for k, v := range rd.values {
 		newValues[k] = v
 	}
-	
+
 	// 合并新值
 	for k, v := range other.values {
 		newValues[k] = v
 	}
-	
+
 	return NewRecordData(newValues)
 }
 
@@ -176,9 +176,8 @@ func calculateHash(values map[string]interface{}) (string, error) {
 			err,
 		)
 	}
-	
+
 	// 计算SHA256哈希
 	hash := sha256.Sum256(data)
 	return fmt.Sprintf("%x", hash), nil
 }
-

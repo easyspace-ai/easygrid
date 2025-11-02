@@ -28,5 +28,3 @@ func UserFrom(ctx context.Context) (string, bool) {
 	}
 	return "", false
 }
-
-

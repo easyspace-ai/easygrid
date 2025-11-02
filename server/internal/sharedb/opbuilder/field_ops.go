@@ -24,14 +24,14 @@ func (b *FieldOpBuilder) SetFieldProperty(key string, oldValue, newValue interfa
 // CreateField 创建字段
 func (b *FieldOpBuilder) CreateField(fieldID string, properties map[string]interface{}) sharedb.OTOperation {
 	ops := make([]sharedb.OTOperation, 0, len(properties))
-	
+
 	for key, value := range properties {
 		ops = append(ops, sharedb.OTOperation{
 			"p":  []interface{}{key},
 			"oi": value,
 		})
 	}
-	
+
 	return sharedb.OTOperation{
 		"p":  []interface{}{"fields", fieldID},
 		"oi": ops,
@@ -41,14 +41,14 @@ func (b *FieldOpBuilder) CreateField(fieldID string, properties map[string]inter
 // DeleteField 删除字段
 func (b *FieldOpBuilder) DeleteField(fieldID string, properties map[string]interface{}) sharedb.OTOperation {
 	ops := make([]sharedb.OTOperation, 0, len(properties))
-	
+
 	for key, value := range properties {
 		ops = append(ops, sharedb.OTOperation{
 			"p":  []interface{}{key},
 			"od": value,
 		})
 	}
-	
+
 	return sharedb.OTOperation{
 		"p":  []interface{}{"fields", fieldID},
 		"od": ops,

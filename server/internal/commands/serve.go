@@ -162,8 +162,8 @@ func setupRouter(cfg *config.Config, cont *container.Container, version string) 
 
 	router := gin.New()
 
-	// 基础中间件
-	router.Use(gin.Recovery())
+	// 基础中间件 - 使用自定义 panic 恢复中间件，记录详细错误
+	router.Use(customRecovery())
 	router.Use(corsMiddleware())
 	router.Use(loggerMiddleware())
 
@@ -182,6 +182,35 @@ func setupRouter(cfg *config.Config, cont *container.Container, version string) 
 	httpHandlers.SetupRoutes(router, cont, assets.StaticFiles)
 
 	return router
+}
+
+// customRecovery 自定义 panic 恢复中间件，记录详细错误日志
+func customRecovery() gin.HandlerFunc {
+	return func(c *gin.Context) {
+		defer func() {
+			if err := recover(); err != nil {
+				// 记录 panic 详细信息
+				logger.Error("Panic recovered",
+					logger.Any("panic", err),
+					logger.String("method", c.Request.Method),
+					logger.String("path", c.Request.URL.Path),
+					logger.String("ip", c.ClientIP()),
+				)
+				
+				// 确保响应头未写入
+				if !c.Writer.Written() {
+					// 返回 500 错误响应
+					c.JSON(http.StatusInternalServerError, gin.H{
+						"code":    http.StatusInternalServerError,
+						"message": "服务器内部错误",
+						"data":    nil,
+					})
+				}
+				c.Abort()
+			}
+		}()
+		c.Next()
+	}
 }
 
 // healthCheckHandler 健康检查处理器

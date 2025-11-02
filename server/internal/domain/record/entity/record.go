@@ -2,7 +2,7 @@ package entity
 
 import (
 	"time"
-	
+
 	"github.com/easyspace-ai/luckdb/server/internal/domain/record"
 	"github.com/easyspace-ai/luckdb/server/internal/domain/record/valueobject"
 )
@@ -15,7 +15,7 @@ type Record struct {
 	tableID string
 	data    valueobject.RecordData
 	version valueobject.RecordVersion
-	
+
 	// 审计字段
 	createdBy string
 	updatedBy string
@@ -38,13 +38,13 @@ func NewRecord(
 			nil,
 		)
 	}
-	
+
 	if data.IsEmpty() {
 		return nil, record.ErrEmptyRecordData
 	}
-	
+
 	now := time.Now()
-	
+
 	return &Record{
 		id:        valueobject.NewRecordID(""),
 		tableID:   tableID,
@@ -109,18 +109,18 @@ func (r *Record) Update(newData valueobject.RecordData, updatedBy string) error 
 	if r.IsDeleted() {
 		return record.ErrCannotModifyDeletedRecord
 	}
-	
+
 	// 合并数据
 	mergedData, err := r.data.Merge(newData)
 	if err != nil {
 		return err
 	}
-	
+
 	r.data = mergedData
 	r.updatedBy = updatedBy
 	r.updatedAt = time.Now()
 	r.version = r.version.Increment()
-	
+
 	return nil
 }
 
@@ -129,18 +129,18 @@ func (r *Record) SetFieldValue(fieldName string, value interface{}, updatedBy st
 	if r.IsDeleted() {
 		return record.ErrCannotModifyDeletedRecord
 	}
-	
+
 	// 更新数据
 	newData, err := r.data.Set(fieldName, value)
 	if err != nil {
 		return err
 	}
-	
+
 	r.data = newData
 	r.updatedBy = updatedBy
 	r.updatedAt = time.Now()
 	r.version = r.version.Increment()
-	
+
 	return nil
 }
 
@@ -149,17 +149,17 @@ func (r *Record) DeleteFieldValue(fieldName string, updatedBy string) error {
 	if r.IsDeleted() {
 		return record.ErrCannotModifyDeletedRecord
 	}
-	
+
 	newData, err := r.data.Delete(fieldName)
 	if err != nil {
 		return err
 	}
-	
+
 	r.data = newData
 	r.updatedBy = updatedBy
 	r.updatedAt = time.Now()
 	r.version = r.version.Increment()
-	
+
 	return nil
 }
 
@@ -168,11 +168,11 @@ func (r *Record) SoftDelete() error {
 	if r.IsDeleted() {
 		return record.ErrRecordAlreadyDeleted
 	}
-	
+
 	now := time.Now()
 	r.deletedAt = &now
 	r.updatedAt = now
-	
+
 	return nil
 }
 
@@ -185,10 +185,10 @@ func (r *Record) Restore() error {
 			nil,
 		)
 	}
-	
+
 	r.deletedAt = nil
 	r.updatedAt = time.Now()
-	
+
 	return nil
 }
 
@@ -196,4 +196,3 @@ func (r *Record) Restore() error {
 func (r *Record) HasChangedSince(version valueobject.RecordVersion) bool {
 	return r.version.IsGreaterThan(version)
 }
-

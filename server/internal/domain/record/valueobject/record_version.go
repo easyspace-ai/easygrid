@@ -13,7 +13,7 @@ func NewRecordVersion(value int64) (RecordVersion, error) {
 	if value < 0 {
 		return RecordVersion{}, record.ErrInvalidVersion
 	}
-	
+
 	return RecordVersion{value: value}, nil
 }
 
@@ -46,4 +46,3 @@ func (rv RecordVersion) IsGreaterThan(other RecordVersion) bool {
 func (rv RecordVersion) IsLessThan(other RecordVersion) bool {
 	return rv.value < other.value
 }
-

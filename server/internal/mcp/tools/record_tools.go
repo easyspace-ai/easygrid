@@ -4,18 +4,20 @@ import (
 	"context"
 	"fmt"
 
+	"github.com/easyspace-ai/luckdb/server/internal/application"
 	"github.com/easyspace-ai/luckdb/server/internal/mcp/protocol"
 )
 
 // CreateRecordTool 创建记录工具
 type CreateRecordTool struct {
-	// 这里将来会注入记录仓储
-	// recordRepo recordRepo.RecordRepository
+	recordService *application.RecordService
 }
 
 // NewCreateRecordTool 创建创建记录工具
-func NewCreateRecordTool() *CreateRecordTool {
-	return &CreateRecordTool{}
+func NewCreateRecordTool(recordService *application.RecordService) *CreateRecordTool {
+	return &CreateRecordTool{
+		recordService: recordService,
+	}
 }
 
 // GetInfo 获取工具信息
@@ -79,23 +81,30 @@ func (t *CreateRecordTool) Execute(ctx context.Context, arguments map[string]int
 	data := arguments["data"].(map[string]interface{})
 
 	// TODO: 实现实际的记录创建逻辑
-	// 这里需要集成 LuckDB 的记录仓储
-
-	// 模拟创建结果
+	// 实现步骤：
+	//  1. 注入RecordService到CreateRecordTool结构体
+	//  2. 验证tableID和spaceID的有效性
+	//  3. 调用RecordService.CreateRecord(ctx, tableID, data)
+	//  4. 返回创建的记录信息
+	
+	// 当前返回实现指导信息
 	result := map[string]interface{}{
 		"space_id":   spaceID,
 		"table_id":   tableID,
-		"record_id":  "generated-record-id",
-		"data":       data,
-		"created_at": "2024-12-19T10:00:00Z",
-		"message":    "创建功能待实现，需要集成 LuckDB 记录仓储",
+		"status":     "not_implemented",
+		"message":    "记录创建功能需要集成RecordService",
+		"next_steps": []string{
+			"在CreateRecordTool中注入RecordService",
+			"实现数据验证逻辑",
+			"调用RecordService.CreateRecord方法",
+		},
 	}
 
 	return &protocol.MCPToolResult{
 		Content: []protocol.MCPToolResultContent{
 			{
 				Type: "text",
-				Text: fmt.Sprintf("在表 %s 中创建新记录（空间: %s）\n数据: %v\n\n注意：此功能需要集成 LuckDB 记录仓储才能正常工作",
+				Text: fmt.Sprintf("记录创建工具调用\n空间ID: %s\n表ID: %s\n数据: %v\n\n状态: 未实现\n需要集成RecordService才能正常工作", 
 					tableID, spaceID, data),
 			},
 		},
@@ -184,16 +193,24 @@ func (t *UpdateRecordTool) Execute(ctx context.Context, arguments map[string]int
 	data := arguments["data"].(map[string]interface{})
 
 	// TODO: 实现实际的记录更新逻辑
-	// 这里需要集成 LuckDB 的记录仓储
-
-	// 模拟更新结果
+	// 实现步骤：
+	//  1. 注入RecordService到UpdateRecordTool结构体
+	//  2. 验证recordID、tableID和spaceID的有效性
+	//  3. 调用RecordService.UpdateRecord(ctx, tableID, recordID, data)
+	//  4. 返回更新的记录信息
+	
+	// 当前返回实现指导信息
 	result := map[string]interface{}{
 		"space_id":   spaceID,
 		"table_id":   tableID,
 		"record_id":  recordID,
-		"data":       data,
-		"updated_at": "2024-12-19T10:00:00Z",
-		"message":    "更新功能待实现，需要集成 LuckDB 记录仓储",
+		"status":     "not_implemented",
+		"message":    "记录更新功能需要集成RecordService",
+		"next_steps": []string{
+			"在UpdateRecordTool中注入RecordService",
+			"实现数据验证逻辑",
+			"调用RecordService.UpdateRecord方法",
+		},
 	}
 
 	return &protocol.MCPToolResult{
@@ -279,16 +296,25 @@ func (t *DeleteRecordTool) Execute(ctx context.Context, arguments map[string]int
 	permanent, _ := validateOptionalBool(arguments, "permanent")
 
 	// TODO: 实现实际的记录删除逻辑
-	// 这里需要集成 LuckDB 的记录仓储
-
-	// 模拟删除结果
+	// 实现步骤：
+	//  1. 注入RecordService到DeleteRecordTool结构体
+	//  2. 验证recordID、tableID和spaceID的有效性
+	//  3. 调用RecordService.DeleteRecord(ctx, tableID, recordID, permanent)
+	//  4. 返回删除结果
+	
+	// 当前返回实现指导信息
 	result := map[string]interface{}{
 		"space_id":   spaceID,
 		"table_id":   tableID,
 		"record_id":  recordID,
 		"permanent":  permanent,
-		"deleted_at": "2024-12-19T10:00:00Z",
-		"message":    "删除功能待实现，需要集成 LuckDB 记录仓储",
+		"status":     "not_implemented",
+		"message":    "记录删除功能需要集成RecordService",
+		"next_steps": []string{
+			"在DeleteRecordTool中注入RecordService",
+			"实现数据验证逻辑",
+			"调用RecordService.DeleteRecord方法",
+		},
 	}
 
 	return &protocol.MCPToolResult{

@@ -140,9 +140,9 @@ func (e *UserPasswordChanged) UserID() valueobject.UserID { return e.userID }
 // AccountLinked 账户关联事件
 type AccountLinked struct {
 	BaseDomainEvent
-	userID     valueobject.UserID
-	accountID  string
-	provider   string
+	userID    valueobject.UserID
+	accountID string
+	provider  string
 }
 
 // NewAccountLinked 创建账户关联事件
@@ -162,9 +162,9 @@ func (e *AccountLinked) Provider() string           { return e.provider }
 // AccountUnlinked 账户解除关联事件
 type AccountUnlinked struct {
 	BaseDomainEvent
-	userID     valueobject.UserID
-	accountID  string
-	provider   string
+	userID    valueobject.UserID
+	accountID string
+	provider  string
 }
 
 // NewAccountUnlinked 创建账户解除关联事件
@@ -180,4 +180,3 @@ func NewAccountUnlinked(userID valueobject.UserID, accountID, provider string) *
 func (e *AccountUnlinked) UserID() valueobject.UserID { return e.userID }
 func (e *AccountUnlinked) AccountID() string          { return e.accountID }
 func (e *AccountUnlinked) Provider() string           { return e.provider }
-

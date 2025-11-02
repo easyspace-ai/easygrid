@@ -2,7 +2,7 @@ package entity
 
 import (
 	"time"
-	
+
 	"github.com/easyspace-ai/luckdb/server/internal/domain/space"
 	"github.com/easyspace-ai/luckdb/server/internal/domain/space/valueobject"
 )
@@ -14,18 +14,18 @@ type Space struct {
 	name        valueobject.SpaceName
 	description *string
 	icon        *string
-	
+
 	// 拥有者
-	ownerID     string
-	
+	ownerID string
+
 	// 审计字段
-	createdBy   string
-	createdAt   time.Time
-	updatedAt   time.Time
-	deletedAt   *time.Time
-	
+	createdBy string
+	createdAt time.Time
+	updatedAt time.Time
+	deletedAt *time.Time
+
 	// 版本控制
-	version     int
+	version int
 }
 
 // NewSpace 创建新空间（工厂方法）
@@ -41,9 +41,9 @@ func NewSpace(
 			nil,
 		)
 	}
-	
+
 	now := time.Now()
-	
+
 	return &Space{
 		id:        valueobject.NewSpaceID(""),
 		name:      name,
@@ -111,11 +111,11 @@ func (s *Space) Rename(newName valueobject.SpaceName) error {
 	if s.IsDeleted() {
 		return space.ErrCannotModifyDeletedSpace
 	}
-	
+
 	s.name = newName
 	s.updatedAt = time.Now()
 	s.incrementVersion()
-	
+
 	return nil
 }
 
@@ -124,10 +124,10 @@ func (s *Space) UpdateDescription(description string) error {
 	if s.IsDeleted() {
 		return space.ErrCannotModifyDeletedSpace
 	}
-	
+
 	s.description = &description
 	s.updatedAt = time.Now()
-	
+
 	return nil
 }
 
@@ -136,10 +136,10 @@ func (s *Space) UpdateIcon(icon string) error {
 	if s.IsDeleted() {
 		return space.ErrCannotModifyDeletedSpace
 	}
-	
+
 	s.icon = &icon
 	s.updatedAt = time.Now()
-	
+
 	return nil
 }
 
@@ -148,12 +148,12 @@ func (s *Space) TransferOwnership(newOwnerID string, currentOwnerID string) erro
 	if s.IsDeleted() {
 		return space.ErrCannotModifyDeletedSpace
 	}
-	
+
 	// 验证当前用户是否为拥有者
 	if !s.IsOwner(currentOwnerID) {
 		return space.ErrNotSpaceOwner
 	}
-	
+
 	// 验证新拥有者ID
 	if newOwnerID == "" {
 		return space.NewDomainError(
@@ -162,11 +162,11 @@ func (s *Space) TransferOwnership(newOwnerID string, currentOwnerID string) erro
 			nil,
 		)
 	}
-	
+
 	s.ownerID = newOwnerID
 	s.updatedAt = time.Now()
 	s.incrementVersion()
-	
+
 	return nil
 }
 
@@ -175,11 +175,11 @@ func (s *Space) SoftDelete() error {
 	if s.IsDeleted() {
 		return space.ErrSpaceAlreadyDeleted
 	}
-	
+
 	now := time.Now()
 	s.deletedAt = &now
 	s.updatedAt = now
-	
+
 	return nil
 }
 
@@ -192,10 +192,10 @@ func (s *Space) Restore() error {
 			nil,
 		)
 	}
-	
+
 	s.deletedAt = nil
 	s.updatedAt = time.Now()
-	
+
 	return nil
 }
 
@@ -205,4 +205,3 @@ func (s *Space) Restore() error {
 func (s *Space) incrementVersion() {
 	s.version++
 }
-

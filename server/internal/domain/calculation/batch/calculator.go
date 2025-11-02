@@ -3,9 +3,9 @@ package batch
 import (
 	"context"
 	"fmt"
-	"sync"
 	"github.com/easyspace-ai/luckdb/server/internal/domain/calculation/dependency"
 	"github.com/easyspace-ai/luckdb/server/internal/domain/calculation/formula"
+	"sync"
 )
 
 // FieldCalculation 字段计算结果

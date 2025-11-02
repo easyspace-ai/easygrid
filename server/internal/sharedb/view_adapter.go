@@ -3,8 +3,8 @@ package sharedb
 import (
 	"context"
 
-	"gorm.io/gorm"
 	"go.uber.org/zap"
+	"gorm.io/gorm"
 )
 
 // ViewAdapter 视图适配器
@@ -40,7 +40,7 @@ func (a *ViewAdapter) GetSnapshot(ctx context.Context, tableID, viewID string, p
 // GetSnapshotBulk 批量获取视图快照
 func (a *ViewAdapter) GetSnapshotBulk(ctx context.Context, tableID string, ids []string, projection map[string]bool) ([]*Snapshot, error) {
 	snapshots := make([]*Snapshot, 0, len(ids))
-	
+
 	for _, id := range ids {
 		snapshot, err := a.GetSnapshot(ctx, tableID, id, projection)
 		if err != nil {
@@ -52,7 +52,7 @@ func (a *ViewAdapter) GetSnapshotBulk(ctx context.Context, tableID string, ids [
 		}
 		snapshots = append(snapshots, snapshot)
 	}
-	
+
 	return snapshots, nil
 }
 

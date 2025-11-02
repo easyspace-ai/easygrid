@@ -177,8 +177,25 @@ func (r *RecordRepositoryDynamic) FindByIDs(ctx context.Context, tableID string,
 	if err != nil {
 		logger.Error("从物理表查询记录失败",
 			logger.String("table_id", tableID),
+			logger.String("physical_table", fullTableName),
+			logger.Strings("select_cols", selectCols),
+			logger.Strings("record_ids", recordIDStrs),
 			logger.ErrorField(err))
 		return nil, err
+	}
+	
+	// ✅ 添加详细日志：查询结果
+	logger.Debug("查询结果详情",
+		logger.String("table_id", tableID),
+		logger.String("physical_table", fullTableName),
+		logger.Int("result_count", len(results)),
+		logger.Int("requested_count", len(ids)))
+	
+	for i, result := range results {
+		logger.Debug("查询结果详情",
+			logger.Int("index", i),
+			logger.Any("result_keys", getMapKeys(result)),
+			logger.String("record_id", fmt.Sprintf("%v", result["__id"])))
 	}
 
 	// 4. 转换为实体
@@ -288,6 +305,15 @@ func (r *RecordRepositoryDynamic) FindByTableID(ctx context.Context, tableID str
 	return records, nil
 }
 
+// getMapKeys 获取 map 的所有键（用于调试）
+func getMapKeys(m map[string]interface{}) []string {
+	keys := make([]string, 0, len(m))
+	for k := range m {
+		keys = append(keys, k)
+	}
+	return keys
+}
+
 // ==================== 保存方法 ====================
 
 // Save 保存记录（保存到物理表）✨ 支持乐观锁
@@ -301,6 +327,9 @@ func (r *RecordRepositoryDynamic) Save(ctx context.Context, record *entity.Recor
 		logger.String("table_id", tableID),
 		logger.Int64("version", record.Version().Value()))
 
+	// ✅ 关键修复：使用事务数据库连接（如果存在）
+	db := pkgDatabase.WithTx(ctx, r.db)
+
 	// 1. 获取 Table 信息
 	table, err := r.tableRepo.GetByID(ctx, tableID)
 	if err != nil {
@@ -313,17 +342,37 @@ func (r *RecordRepositoryDynamic) Save(ctx context.Context, record *entity.Recor
 	baseID := table.BaseID()
 
 	// 2. 获取字段列表
+	logger.Info("🔍 Save 方法：准备调用 FindByTableID",
+		logger.String("record_id", record.ID().String()),
+		logger.String("table_id", tableID),
+		logger.String("base_id", baseID))
+	
 	fields, err := r.fieldRepo.FindByTableID(ctx, tableID)
 	if err != nil {
+		logger.Error("❌ Save 方法：FindByTableID 失败",
+			logger.String("table_id", tableID),
+			logger.ErrorField(err))
 		return fmt.Errorf("获取字段列表失败: %w", err)
 	}
+
+	logger.Info("🔍 Save 方法：FindByTableID 返回结果",
+		logger.String("record_id", record.ID().String()),
+		logger.String("table_id", tableID),
+		logger.Int("field_count", len(fields)),
+		logger.Any("field_ids", func() []string {
+			ids := make([]string, len(fields))
+			for i, f := range fields {
+				ids[i] = f.ID().String()
+			}
+			return ids
+		}()))
 
 	// 3. ✅ 构建数据映射（使用完整表名）
 	fullTableName := r.dbProvider.GenerateTableName(baseID, tableID)
 
 	// 5. ✅ 检查记录是否已存在（用于判断INSERT还是UPDATE）
 	var count int64
-	err = r.db.WithContext(ctx).
+	err = db.WithContext(ctx).
 		Table(fullTableName).
 		Where("__id = ?", record.ID().String()).
 		Count(&count).Error
@@ -356,12 +405,27 @@ func (r *RecordRepositoryDynamic) Save(ctx context.Context, record *entity.Recor
 	// 用户字段（field_id -> db_field_name）
 	recordData := record.Data()
 
+	// ✅ 添加详细日志：记录保存前的字段数据（使用 Info 级别以便调试）
+	logger.Info("记录保存前的字段数据",
+		logger.String("record_id", record.ID().String()),
+		logger.Any("record_data", recordData.ToMap()),
+		logger.Int("field_count", len(fields)))
+
 	for _, field := range fields {
 		fieldID := field.ID().String()
 		dbFieldName := field.DBFieldName().String()
 
 		// 获取字段值
-		value, _ := recordData.Get(fieldID)
+		value, exists := recordData.Get(fieldID)
+		
+		// ✅ 添加详细日志：每个字段的转换过程（使用 Info 级别以便调试）
+		logger.Info("处理字段值",
+			logger.String("field_id", fieldID),
+			logger.String("db_field_name", dbFieldName),
+			logger.String("field_type", field.Type().String()),
+			logger.String("db_field_type", field.DBFieldType()),
+			logger.Any("value", value),
+			logger.Bool("exists", exists))
 
 		// ✅ 关键修复：使用字段实体的类型转换方法（参考 teable 设计）
 		// field.ConvertCellValueToDBValue 会根据字段类型和数据库类型进行正确的转换
@@ -373,16 +437,47 @@ func (r *RecordRepositoryDynamic) Save(ctx context.Context, record *entity.Recor
 		}
 
 		data[dbFieldName] = convertedValue
+		
+		// ✅ 添加详细日志：转换后的值（使用 Info 级别以便调试）
+		logger.Info("字段值转换完成",
+			logger.String("field_id", fieldID),
+			logger.String("db_field_name", dbFieldName),
+			logger.Any("converted_value", convertedValue))
 	}
+
+	// ✅ 添加详细日志：最终保存的数据（使用 Info 级别以便调试）
+	logger.Info("准备保存到数据库的数据",
+		logger.String("record_id", record.ID().String()),
+		logger.String("table_id", tableID),
+		logger.String("physical_table", fullTableName),
+		logger.Any("data", data),
+		logger.Int("field_count", len(fields)),
+		logger.Int("data_keys_count", len(data)))
 
 	// 6. ✅ 执行保存（带乐观锁检查）
 	var result *gorm.DB
 
 	if isNewRecord {
 		// ✅ 新记录：直接 INSERT
-		result = r.db.WithContext(ctx).
+		logger.Debug("执行 INSERT 操作",
+			logger.String("record_id", record.ID().String()),
+			logger.String("physical_table", fullTableName))
+		result = db.WithContext(ctx).
 			Table(fullTableName).
 			Create(data)
+		
+		// ✅ 添加详细日志：INSERT 操作结果
+		if result.Error != nil {
+			logger.Error("INSERT 操作失败",
+				logger.String("record_id", record.ID().String()),
+				logger.String("physical_table", fullTableName),
+				logger.ErrorField(result.Error),
+				logger.Any("data", data))
+		} else {
+			logger.Debug("INSERT 操作成功",
+				logger.String("record_id", record.ID().String()),
+				logger.Int64("rows_affected", result.RowsAffected))
+		}
 	} else {
 		// ✅ 更新记录：乐观锁检查
 		// Entity的版本已经递增，使用 version - 1 作为WHERE条件
@@ -390,7 +485,7 @@ func (r *RecordRepositoryDynamic) Save(ctx context.Context, record *entity.Recor
 		currentVersion := record.Version().Value() // 新版本（已递增）
 		checkVersion := currentVersion - 1         // 检查版本（旧版本）
 
-		result = r.db.WithContext(ctx).
+		result = db.WithContext(ctx).
 			Table(fullTableName).
 			Where("__id = ?", record.ID().String()).
 			Where("__version = ?", checkVersion). // WHERE __version = 旧版本
@@ -399,9 +494,24 @@ func (r *RecordRepositoryDynamic) Save(ctx context.Context, record *entity.Recor
 
 	// 7. ✅ 处理错误（约束错误友好提示）
 	if result.Error != nil {
+		logger.Error("数据库操作失败",
+			logger.String("record_id", record.ID().String()),
+			logger.String("physical_table", fullTableName),
+			logger.Bool("is_new", isNewRecord),
+			logger.ErrorField(result.Error),
+			logger.Any("data", data))
 		// 使用约束错误处理工具
 		constraintErr := pkgDatabase.HandleDBConstraintError(result.Error, tableID, r.fieldRepo, ctx)
 		return constraintErr
+	}
+	
+	// ✅ 添加详细日志：INSERT 操作结果
+	if isNewRecord {
+		logger.Info("INSERT 操作完成",
+			logger.String("record_id", record.ID().String()),
+			logger.String("physical_table", fullTableName),
+			logger.Int64("rows_affected", result.RowsAffected),
+			logger.Any("data_keys", getMapKeys(data)))
 	}
 
 	// 8. ✅ 乐观锁：检查是否有行被更新（版本冲突检测）
@@ -418,6 +528,13 @@ func (r *RecordRepositoryDynamic) Save(ctx context.Context, record *entity.Recor
 		})
 	}
 
+	// ✅ 添加详细日志：保存后的验证
+	logger.Debug("记录保存完成，验证数据",
+		logger.String("record_id", record.ID().String()),
+		logger.String("physical_table", fullTableName),
+		logger.Int64("rows_affected", result.RowsAffected),
+		logger.Bool("is_new", isNewRecord))
+
 	// ✅ 记录保存到物理表完成（对齐 Teable：不使用 record_meta）
 
 	logger.Info("✅ 记录保存成功（物理表+乐观锁）",
@@ -425,7 +542,9 @@ func (r *RecordRepositoryDynamic) Save(ctx context.Context, record *entity.Recor
 		logger.String("table_id", tableID),
 		logger.String("physical_table", fullTableName),
 		logger.Bool("is_new", isNewRecord),
-		logger.Int64("version", record.Version().Value()))
+		logger.Int64("version", record.Version().Value()),
+		logger.Int("field_count", len(fields)),
+		logger.Int64("rows_affected", result.RowsAffected))
 
 	return nil
 }
@@ -687,17 +806,47 @@ func (r *RecordRepositoryDynamic) toDomainEntity(
 
 	// 提取用户字段数据
 	data := make(map[string]interface{})
+	
+	// ✅ 添加详细日志：查询结果的字段数据
+	logger.Debug("开始转换查询结果",
+		logger.String("record_id", fmt.Sprintf("%v", result["__id"])),
+		logger.Int("field_count", len(fields)),
+		logger.Any("result_keys", getMapKeys(result)))
+	
 	for _, field := range fields {
 		fieldID := field.ID().String()
 		dbFieldName := field.DBFieldName().String()
 
 		// 从物理表结果中获取值
 		if value, ok := result[dbFieldName]; ok {
+			// ✅ 添加详细日志：字段值转换
+			logger.Debug("转换字段值",
+				logger.String("field_id", fieldID),
+				logger.String("db_field_name", dbFieldName),
+				logger.String("field_type", field.Type().String()),
+				logger.Any("raw_value", value),
+				logger.String("value_type", fmt.Sprintf("%T", value)))
+			
 			// 转换值（从数据库类型到应用类型）
 			convertedValue := r.convertValueFromDB(field, value)
 			data[fieldID] = convertedValue
+			
+			logger.Debug("字段值转换完成",
+				logger.String("field_id", fieldID),
+				logger.Any("converted_value", convertedValue))
+		} else {
+			// ✅ 添加警告：字段不存在于查询结果中
+			logger.Debug("字段不存在于查询结果",
+				logger.String("field_id", fieldID),
+				logger.String("db_field_name", dbFieldName))
 		}
 	}
+	
+	// ✅ 添加详细日志：最终转换的数据
+	logger.Debug("记录数据转换完成",
+		logger.String("record_id", fmt.Sprintf("%v", result["__id"])),
+		logger.Int("data_field_count", len(data)),
+		logger.Any("data", data))
 
 	recordData, err := valueobject.NewRecordData(data)
 	if err != nil {

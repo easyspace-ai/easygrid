@@ -18,8 +18,8 @@ import (
 type Manager struct {
 	// ShareDB、YJS 和 SSE 管理器
 	sharedbService *sharedb.ShareDBService
-	yjsManager     *YjsManager
-	sseManager     *SSEManager
+ 
+	sseManager *SSEManager
 
 	// 业务事件管理器
 	businessEventManager *events.BusinessEventManager
@@ -43,10 +43,6 @@ func NewManager(logger *zap.Logger) *Manager {
 		ctx:                  ctx,
 		cancel:               cancel,
 	}
-
-	// 初始化 YJS 管理器
-	manager.yjsManager = NewYjsManager(logger)
-	logger.Info("✅ YJS 管理器已创建")
 
 	// 初始化 SSE 管理器，传入业务事件管理器
 	manager.sseManager = NewSSEManager(logger, businessEventManager)
@@ -111,11 +107,6 @@ func (m *Manager) GetStats() map[string]interface{} {
 		stats["sharedb"] = m.sharedbService.GetStats()
 	}
 
-	// 添加YJS管理器的统计信息
-	if m.yjsManager != nil {
-		stats["yjs"] = m.yjsManager.GetStats()
-	}
-
 	// 添加SSE管理器的统计信息
 	if m.sseManager != nil {
 		stats["sse"] = m.sseManager.GetStats()
@@ -137,13 +128,11 @@ func (m *Manager) HandleShareDBWebSocket(c *gin.Context) {
 
 // HandleYjsWebSocket 处理 YJS WebSocket 连接
 func (m *Manager) HandleYjsWebSocket(c *gin.Context) {
-	if m.yjsManager != nil {
-		m.yjsManager.HandleYjsWebSocket(c)
-	} else {
-		c.JSON(http.StatusServiceUnavailable, gin.H{
-			"error": "YJS service not available",
-		})
-	}
+
+	c.JSON(http.StatusServiceUnavailable, gin.H{
+		"error": "YJS service not available",
+	})
+
 }
 
 // HandleSSE 处理 SSE 连接
@@ -242,11 +231,6 @@ func (m *Manager) Shutdown() error {
 	// 关闭 ShareDB 服务
 	if m.sharedbService != nil {
 		m.sharedbService.Shutdown()
-	}
-
-	// 关闭 YJS 管理器
-	if m.yjsManager != nil {
-		m.yjsManager.Shutdown()
 	}
 
 	// 关闭 SSE 管理器

@@ -53,7 +53,7 @@ func (pm *PresenceManagerImpl) GetPresences(ctx context.Context, channel string)
 	}
 
 	presences := presencesInterface.(map[string]PresenceData)
-	
+
 	// 过滤掉过期的在线状态（超过5分钟）
 	now := time.Now().Unix()
 	filteredPresences := make(map[string]PresenceData)

@@ -94,4 +94,3 @@ func FlatGraph(graph []GraphItem) []string {
 
 	return fieldIDs
 }
-

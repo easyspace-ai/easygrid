@@ -19,5 +19,3 @@ type Integration struct {
 func (Integration) TableName() string {
 	return "integration"
 }
-
-

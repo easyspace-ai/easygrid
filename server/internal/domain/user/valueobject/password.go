@@ -24,7 +24,7 @@ func NewPassword(value string) (Password, error) {
 	if err := validatePassword(value); err != nil {
 		return Password{}, err
 	}
-	
+
 	return Password{value: value}, nil
 }
 
@@ -43,7 +43,7 @@ func (p Password) Hash() (HashedPassword, error) {
 			err,
 		)
 	}
-	
+
 	return HashedPassword{value: string(hash)}, nil
 }
 
@@ -52,18 +52,18 @@ func validatePassword(password string) error {
 	if password == "" {
 		return user.ErrPasswordEmpty
 	}
-	
+
 	if len(password) < MinPasswordLength {
 		return user.ErrPasswordTooShort
 	}
-	
+
 	if len(password) > MaxPasswordLength {
 		return user.ErrPasswordTooLong
 	}
-	
+
 	// 检查密码强度（至少包含3种类型的字符）
 	var hasLower, hasUpper, hasDigit, hasSpecial bool
-	
+
 	for _, char := range password {
 		switch {
 		case unicode.IsLower(char):
@@ -76,7 +76,7 @@ func validatePassword(password string) error {
 			hasSpecial = true
 		}
 	}
-	
+
 	charTypes := 0
 	if hasLower {
 		charTypes++
@@ -90,11 +90,11 @@ func validatePassword(password string) error {
 	if hasSpecial {
 		charTypes++
 	}
-	
+
 	if charTypes < 3 {
 		return user.ErrPasswordTooWeak
 	}
-	
+
 	return nil
 }
 
@@ -108,7 +108,7 @@ func NewHashedPassword(hash string) (HashedPassword, error) {
 	if hash == "" {
 		return HashedPassword{}, user.ErrInvalidPasswordHash
 	}
-	
+
 	return HashedPassword{value: hash}, nil
 }
 
@@ -132,4 +132,3 @@ func (hp HashedPassword) Equals(other HashedPassword) bool {
 func (hp HashedPassword) IsEmpty() bool {
 	return hp.value == ""
 }
-

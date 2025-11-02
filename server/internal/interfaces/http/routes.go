@@ -6,6 +6,7 @@ import (
 	"github.com/gin-gonic/gin"
 
 	"github.com/easyspace-ai/luckdb/server/internal/container"
+	"github.com/easyspace-ai/luckdb/server/pkg/logger"
 )
 
 // SetupRoutes 设置所有API路由
@@ -52,6 +53,9 @@ func SetupRoutes(router *gin.Engine, cont *container.Container, staticFiles embe
 
 		// 视图相关路由
 		setupViewRoutes(authRequired, cont)
+
+		// 附件相关路由 ✨
+		setupAttachmentRoutes(authRequired, cont)
 
 	}
 
@@ -211,6 +215,9 @@ func setupRecordRoutes(rg *gin.RouterGroup, cont *container.Container) {
 
 	// 记录路由（保留旧路由以兼容，但标记为废弃）
 	// ⚠️ 废弃：建议使用 /api/v1/tables/:tableId/records/:recordId
+	// 废弃原因：旧路由缺少tableId参数，无法确定记录所属的表
+	// 迁移建议：客户端应使用新的表级路由，提供完整的上下文信息
+	// 计划移除：在下一个主要版本中移除这些路由
 	records := rg.Group("/records")
 	{
 		records.GET("/:recordId", handler.GetRecord)
@@ -296,6 +303,45 @@ func setupViewRoutes(rg *gin.RouterGroup, cont *container.Container) {
 	share := rg.Group("/share")
 	{
 		share.GET("/views/:shareId", handler.GetViewByShareID) // 通过分享ID获取视图
+	}
+}
+
+// setupAttachmentRoutes 设置附件路由 ✨
+func setupAttachmentRoutes(rg *gin.RouterGroup, cont *container.Container) {
+	handler := NewAttachmentHandler(cont.AttachmentService(), logger.Logger)
+
+	// 附件路由
+	attachments := rg.Group("/attachments")
+	{
+		// 生成上传签名
+		attachments.POST("/signature", handler.GenerateSignature)
+
+		// 上传文件（使用令牌）
+		attachments.POST("/upload/:token", handler.UploadFile)
+
+		// 通知上传完成
+		attachments.POST("/notify/:token", handler.NotifyUpload)
+
+		// 读取文件（使用通配符以支持路径中的斜杠）
+		attachments.GET("/read/*path", handler.ReadFile)
+
+		// 删除文件
+		attachments.DELETE("/:id", handler.DeleteFile)
+
+		// 获取附件信息
+		attachments.GET("/:id", handler.GetAttachment)
+
+		// 列出附件
+		attachments.GET("", handler.ListAttachments)
+
+		// 清理过期令牌
+		attachments.POST("/cleanup-tokens", handler.CleanupExpiredTokens)
+	}
+
+	// 表格附件统计
+	tables := rg.Group("/tables")
+	{
+		tables.GET("/:tableId/attachments/stats", handler.GetAttachmentStats)
 	}
 }
 
@@ -395,7 +441,7 @@ func setupShareDBRoutes(rg *gin.RouterGroup, cont *container.Container) {
 
 		// 连接管理
 		sharedb.GET("/connections", handler.GetConnections)
-		
+
 		// 开发环境：强制清理所有连接
 		sharedb.POST("/cleanup", handler.ForceCleanupConnections)
 	}
@@ -412,9 +458,6 @@ func setupWebSocketRoutes(router *gin.Engine, cont *container.Container) {
 	router.GET("/socket", JWTAuthMiddleware(cont.AuthService()), cont.RealtimeManager().HandleShareDBWebSocket)
 	router.GET("/socket/*path", JWTAuthMiddleware(cont.AuthService()), cont.RealtimeManager().HandleShareDBWebSocket)
 
-	// YJS 协作 WebSocket 路由（需要认证）
-	router.GET("/yjs/ws/:document_id", JWTAuthMiddleware(cont.AuthService()), cont.RealtimeManager().HandleYjsWebSocket)
-	router.GET("/yjs/ws", JWTAuthMiddleware(cont.AuthService()), cont.RealtimeManager().HandleYjsWebSocket)
 }
 
 // setupStaticFiles 设置静态文件服务

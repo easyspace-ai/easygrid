@@ -141,4 +141,3 @@ func (s *LinkService) GetLinkDerivation(
 
 	return derivation, nil
 }
-

@@ -17,6 +17,8 @@ go.work.sum
 /dist/
 /tmp/
 main
+server
+server_test
 teable-backend*
 
 # 依赖
@@ -50,6 +52,7 @@ uploads/
 # 数据库
 *.db
 *.sqlite
+data.db
 
 # 缓存
 .cache/
@@ -57,6 +60,8 @@ uploads/
 # 临时文件
 tmp/
 temp/
+*.tmp
+*.temp
 
 # 操作系统
 .DS_Store
@@ -75,3 +80,13 @@ build-errors.log
 
 # 前端静态文件 (由构建脚本复制)
 /internal/interfaces/http/web/
+
+# 备份文件
+*.bak
+*.backup
+*_old.*
+*_backup.*
+
+# 文档归档
+docs/archive/
+cmd/sharedb-test/archive/

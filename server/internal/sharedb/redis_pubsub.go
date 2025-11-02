@@ -12,14 +12,14 @@ import (
 
 // RedisPubSub Redis 发布订阅实现
 type RedisPubSub struct {
-	client       *redis.Client
-	prefix       string
-	listeners    sync.Map // channel -> []func(*opbuilder.Operation)
+	client        *redis.Client
+	prefix        string
+	listeners     sync.Map                      // channel -> []func(*opbuilder.Operation)
 	subscriptions map[string]context.CancelFunc // channel -> cancelFunc
-	logger       *zap.Logger
-	mu           sync.RWMutex
-	ctx          context.Context
-	cancel       context.CancelFunc
+	logger        *zap.Logger
+	mu            sync.RWMutex
+	ctx           context.Context
+	cancel        context.CancelFunc
 }
 
 // NewRedisPubSub 创建 Redis 发布订阅
@@ -146,13 +146,13 @@ func (p *RedisPubSub) Unsubscribe(ctx context.Context, channel string) error {
 	defer p.mu.Unlock()
 
 	fullChannel := p.prefix + channel
-	
+
 	// 取消订阅
 	if cancel, exists := p.subscriptions[fullChannel]; exists {
 		cancel()
 		delete(p.subscriptions, fullChannel)
 	}
-	
+
 	return nil
 }
 

@@ -4,13 +4,13 @@ package opbuilder
 var (
 	// RecordOp 记录操作构建器
 	RecordOp = &RecordOpBuilder{}
-	
+
 	// FieldOp 字段操作构建器
 	FieldOp = &FieldOpBuilder{}
-	
+
 	// ViewOp 视图操作构建器
 	ViewOp = &ViewOpBuilder{}
-	
+
 	// TableOp 表格操作构建器
 	TableOp = &TableOpBuilder{}
 )

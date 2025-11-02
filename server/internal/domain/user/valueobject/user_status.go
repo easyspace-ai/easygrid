@@ -23,7 +23,7 @@ func NewUserStatus(value string) (UserStatus, error) {
 			nil,
 		)
 	}
-	
+
 	return UserStatus{value: value}, nil
 }
 
@@ -100,7 +100,6 @@ func isValidUserStatus(value string) bool {
 		StatusDeleted:     true,
 		StatusPending:     true,
 	}
-	
+
 	return validStatuses[value]
 }
-

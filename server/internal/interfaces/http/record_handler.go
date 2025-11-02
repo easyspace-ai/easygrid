@@ -43,23 +43,52 @@ func NewRecordHandler(
 
 // CreateRecord 创建记录
 func (h *RecordHandler) CreateRecord(c *gin.Context) {
+	// 添加详细的请求日志
+	logger.Info("开始创建记录",
+		logger.String("method", c.Request.Method),
+		logger.String("path", c.Request.URL.Path),
+		logger.String("ip", c.ClientIP()),
+		logger.String("content_type", c.GetHeader("Content-Type")))
+
 	var req dto.CreateRecordRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
+		logger.Error("JSON绑定失败",
+			logger.ErrorField(err),
+			logger.String("path", c.Request.URL.Path))
 		response.Error(c, errors.ErrBadRequest.WithDetails(err.Error()))
 		return
 	}
 
+	logger.Info("JSON绑定成功",
+		logger.String("table_id", req.TableID),
+		logger.Any("data", req.Data))
+
 	userID := c.GetString("user_id")
 	if userID == "" {
+		logger.Error("用户ID为空", logger.String("path", c.Request.URL.Path))
 		response.Error(c, errors.ErrUnauthorized.WithDetails("未授权"))
 		return
 	}
 
+	logger.Info("开始调用 RecordService.CreateRecord",
+		logger.String("table_id", req.TableID),
+		logger.String("user_id", userID))
+
 	resp, err := h.recordService.CreateRecord(c.Request.Context(), req, userID)
 	if err != nil {
+		// 记录详细错误信息
+		logger.Error("创建记录失败",
+			logger.String("table_id", req.TableID),
+			logger.Any("data", req.Data),
+			logger.String("user_id", userID),
+			logger.ErrorField(err))
 		response.Error(c, err)
 		return
 	}
+
+	logger.Info("创建记录成功",
+		logger.String("table_id", req.TableID),
+		logger.String("record_id", resp.ID))
 
 	// ✅ 虚拟字段计算已在 Service 事务内完成，无需异步计算
 	response.Success(c, resp, "创建记录成功")
@@ -252,9 +281,32 @@ func (h *RecordHandler) BatchDeleteRecords(c *gin.Context) {
 func (h *RecordHandler) ListRecords(c *gin.Context) {
 	tableID := c.Param("tableId")
 
-	// 解析分页参数
-	limit, _ := strconv.Atoi(c.DefaultQuery("limit", "100"))
-	offset, _ := strconv.Atoi(c.DefaultQuery("offset", "0"))
+    // 解析分页参数：优先支持 page/perPage，其次兼容 limit/offset
+    var limit, offset int
+    if pageStr := c.Query("page"); pageStr != "" {
+        page, _ := strconv.Atoi(pageStr)
+        if page < 1 {
+            page = 1
+        }
+        perPage := 20
+        if pp := c.Query("perPage"); pp != "" {
+            if v, err := strconv.Atoi(pp); err == nil && v > 0 {
+                perPage = v
+            }
+        }
+        limit = perPage
+        offset = (page - 1) * perPage
+    } else {
+        // 回退到 limit/offset
+        limit, _ = strconv.Atoi(c.DefaultQuery("limit", "100"))
+        offset, _ = strconv.Atoi(c.DefaultQuery("offset", "0"))
+        if limit <= 0 {
+            limit = 100
+        }
+        if offset < 0 {
+            offset = 0
+        }
+    }
 
 	// 调用 Service 获取记录列表和总数
 	records, total, err := h.recordService.ListRecords(c.Request.Context(), tableID, limit, offset)
@@ -264,8 +316,8 @@ func (h *RecordHandler) ListRecords(c *gin.Context) {
 	}
 
 	// 计算总页数
-	totalPages := int((total + int64(limit) - 1) / int64(limit))
-	page := (offset / limit) + 1
+    totalPages := int((total + int64(limit) - 1) / int64(limit))
+    page := (offset / limit) + 1
 
 	// 使用分页响应（Records 是唯一需要分页的资源）
 	pagination := response.Pagination{

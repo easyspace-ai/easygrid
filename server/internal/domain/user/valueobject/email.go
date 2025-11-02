@@ -18,12 +18,12 @@ var emailRegex = regexp.MustCompile(`^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]
 func NewEmail(value string) (Email, error) {
 	// 标准化处理
 	normalized := strings.ToLower(strings.TrimSpace(value))
-	
+
 	// 验证
 	if err := validateEmail(normalized); err != nil {
 		return Email{}, err
 	}
-	
+
 	return Email{value: normalized}, nil
 }
 
@@ -65,15 +65,14 @@ func validateEmail(email string) error {
 	if email == "" {
 		return user.ErrEmailEmpty
 	}
-	
+
 	if len(email) > 255 {
 		return user.ErrEmailTooLong
 	}
-	
+
 	if !emailRegex.MatchString(email) {
 		return user.ErrEmailInvalid
 	}
-	
+
 	return nil
 }
-

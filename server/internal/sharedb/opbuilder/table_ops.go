@@ -24,14 +24,14 @@ func (b *TableOpBuilder) SetTableProperty(key string, oldValue, newValue interfa
 // CreateTable 创建表
 func (b *TableOpBuilder) CreateTable(tableID string, properties map[string]interface{}) sharedb.OTOperation {
 	ops := make([]sharedb.OTOperation, 0, len(properties))
-	
+
 	for key, value := range properties {
 		ops = append(ops, sharedb.OTOperation{
 			"p":  []interface{}{key},
 			"oi": value,
 		})
 	}
-	
+
 	return sharedb.OTOperation{
 		"p":  []interface{}{"tables", tableID},
 		"oi": ops,
@@ -41,14 +41,14 @@ func (b *TableOpBuilder) CreateTable(tableID string, properties map[string]inter
 // DeleteTable 删除表
 func (b *TableOpBuilder) DeleteTable(tableID string, properties map[string]interface{}) sharedb.OTOperation {
 	ops := make([]sharedb.OTOperation, 0, len(properties))
-	
+
 	for key, value := range properties {
 		ops = append(ops, sharedb.OTOperation{
 			"p":  []interface{}{key},
 			"od": value,
 		})
 	}
-	
+
 	return sharedb.OTOperation{
 		"p":  []interface{}{"tables", tableID},
 		"od": ops,

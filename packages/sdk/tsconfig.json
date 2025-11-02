@@ -1,24 +1,37 @@
 {
   "compilerOptions": {
-    "noEmit": false,
-    "outDir": "./dist",
-    "rootDir": "./src",
+    "target": "ES2021",
+    "lib": ["ES2021", "DOM"],
+    "module": "ESNext",
+    "moduleResolution": "node",
+    "allowSyntheticDefaultImports": true,
+    "esModuleInterop": true,
+    "allowJs": true,
+    "checkJs": false,
     "declaration": true,
     "declarationMap": true,
     "sourceMap": true,
-    "noUnusedLocals": false,
-    "noUnusedParameters": false,
-    "verbatimModuleSyntax": false,
-    "moduleResolution": "bundler",
-    "module": "ESNext",
-    "target": "ES2022",
+    "outDir": "./dist",
+    "rootDir": "./src",
+    "removeComments": false,
     "strict": true,
-    "esModuleInterop": true,
+    "noImplicitAny": true,
+    "strictNullChecks": true,
+    "strictFunctionTypes": true,
+    "noImplicitThis": true,
+    "noImplicitReturns": true,
+    "noFallthroughCasesInSwitch": true,
+    "noUncheckedIndexedAccess": true,
+    "exactOptionalPropertyTypes": true,
     "skipLibCheck": true,
     "forceConsistentCasingInFileNames": true,
-    "jsx": "react-jsx",
-    "allowSyntheticDefaultImports": true,
-    "resolveJsonModule": true
+    "resolveJsonModule": true,
+    "isolatedModules": true,
+    "verbatimModuleSyntax": false,
+    "baseUrl": ".",
+    "paths": {
+      "@/*": ["src/*"]
+    }
   },
   "include": [
     "src/**/*"
@@ -26,17 +39,6 @@
   "exclude": [
     "node_modules",
     "dist",
-    "examples/**/*",
-    "**/*.test.ts",
-    "**/*.spec.ts",
-    "src/components/ConnectionIndicator.tsx",
-    "src/hooks/connection/useConnectionState.ts",
-    "src/hooks/connection/useReconnect.ts",
-    "src/hooks/documents/**/*",
-    "src/hooks/mutations/**/*",
-    "src/hooks/records/**/*",
-    "src/hooks/useEasyGrid.ts",
-    "src/hooks/fields/**/*"
+    "tests"
   ]
 }
-

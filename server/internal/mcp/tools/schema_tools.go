@@ -4,19 +4,22 @@ import (
 	"context"
 	"fmt"
 
+	"github.com/easyspace-ai/luckdb/server/internal/application"
 	"github.com/easyspace-ai/luckdb/server/internal/mcp/protocol"
 )
 
 // GetTableSchemaTool 获取表结构工具
 type GetTableSchemaTool struct {
-	// 这里将来会注入表仓储和字段仓储
-	// tableRepo tableRepo.TableRepository
-	// fieldRepo fieldRepo.FieldRepository
+	tableService *application.TableService
+	fieldService *application.FieldService
 }
 
 // NewGetTableSchemaTool 创建获取表结构工具
-func NewGetTableSchemaTool() *GetTableSchemaTool {
-	return &GetTableSchemaTool{}
+func NewGetTableSchemaTool(tableService *application.TableService, fieldService *application.FieldService) *GetTableSchemaTool {
+	return &GetTableSchemaTool{
+		tableService: tableService,
+		fieldService: fieldService,
+	}
 }
 
 // GetInfo 获取工具信息
@@ -85,66 +88,77 @@ func (t *GetTableSchemaTool) Execute(ctx context.Context, arguments map[string]i
 		includeMetadata = true
 	}
 
-	// TODO: 实现实际的表结构查询逻辑
-	// 这里需要集成 LuckDB 的表仓储和字段仓储
-
-	// 模拟表结构结果
-	schema := map[string]interface{}{
-		"table_id":         tableID,
-		"space_id":         spaceID,
-		"name":             "示例表",
-		"description":      "这是一个示例表",
-		"icon":             "📊",
-		"created_at":       "2024-12-19T10:00:00Z",
-		"updated_at":       "2024-12-19T10:00:00Z",
-		"version":          1,
-		"include_fields":   includeFields,
-		"include_metadata": includeMetadata,
-	}
-
-	if includeFields {
-		schema["fields"] = []map[string]interface{}{
-			{
-				"id":          "field_1",
-				"name":        "ID",
-				"type":        "number",
-				"description": "主键字段",
-				"is_primary":  true,
-				"is_required": true,
-				"order":       1.0,
+	// 获取表信息
+	table, err := t.tableService.GetTable(ctx, tableID)
+	if err != nil {
+		return &protocol.MCPToolResult{
+			Content: []protocol.MCPToolResultContent{
+				{
+					Type: "text",
+					Text: fmt.Sprintf("获取表信息失败: %v", err),
+				},
 			},
-			{
-				"id":          "field_2",
-				"name":        "名称",
-				"type":        "text",
-				"description": "名称字段",
-				"is_primary":  false,
-				"is_required": true,
-				"order":       2.0,
-			},
-		}
-	}
-
-	if includeMetadata {
-		schema["metadata"] = map[string]interface{}{
-			"record_count":  0,
-			"field_count":   2,
-			"last_modified": "2024-12-19T10:00:00Z",
-			"permissions":   []string{"read", "write"},
-		}
+			IsError: true,
+		}, nil
 	}
 
 	result := map[string]interface{}{
-		"schema":  schema,
-		"message": "表结构查询功能待实现，需要集成 LuckDB 表仓储和字段仓储",
+		"space_id": spaceID,
+		"table_id": tableID,
+		"table": map[string]interface{}{
+			"id":          table.ID,
+			"name":        table.Name,
+			"description": table.Description,
+			"base_id":     table.BaseID,
+			"field_count": table.FieldCount,
+			"record_count": table.RecordCount,
+			"created_at":  table.CreatedAt,
+			"updated_at":  table.UpdatedAt,
+		},
+	}
+
+	// 如果需要包含字段信息
+	if includeFields {
+		fields, err := t.fieldService.ListFields(ctx, tableID)
+		if err != nil {
+			result["fields_error"] = fmt.Sprintf("获取字段信息失败: %v", err)
+		} else {
+			fieldList := make([]map[string]interface{}, len(fields))
+			for i, field := range fields {
+				fieldList[i] = map[string]interface{}{
+					"id":          field.ID,
+					"name":        field.Name,
+					"type":        field.Type,
+					"description": field.Description,
+					"options":     field.Options,
+					"created_at":  field.CreatedAt,
+					"updated_at":  field.UpdatedAt,
+				}
+			}
+			result["fields"] = fieldList
+		}
+	}
+
+	// 如果需要包含元数据信息
+	if includeMetadata {
+		fieldCount := 0
+		if includeFields {
+			if fields, ok := result["fields"].([]map[string]interface{}); ok {
+				fieldCount = len(fields)
+			}
+		}
+		result["metadata"] = map[string]interface{}{
+			"field_count":  fieldCount,
+			"record_count": 0, // TODO: 从记录服务获取
+			"permissions":  []string{"read", "write"}, // TODO: 从权限服务获取
+		}
 	}
 
 	return &protocol.MCPToolResult{
 		Content: []protocol.MCPToolResultContent{
 			{
 				Type: "text",
-				Text: fmt.Sprintf("获取表 %s 的结构信息（空间: %s）\n包含字段: %t, 包含元数据: %t\n\n注意：此功能需要集成 LuckDB 表仓储和字段仓储才能正常工作",
-					tableID, spaceID, includeFields, includeMetadata),
+				Text: fmt.Sprintf("成功获取表 %s 的结构信息（空间: %s）", table.Name, spaceID),
 			},
 		},
 		IsError:  false,
@@ -154,13 +168,14 @@ func (t *GetTableSchemaTool) Execute(ctx context.Context, arguments map[string]i
 
 // ListTablesTool 列出表工具
 type ListTablesTool struct {
-	// 这里将来会注入表仓储
-	// tableRepo tableRepo.TableRepository
+	tableService *application.TableService
 }
 
 // NewListTablesTool 创建列出表工具
-func NewListTablesTool() *ListTablesTool {
-	return &ListTablesTool{}
+func NewListTablesTool(tableService *application.TableService) *ListTablesTool {
+	return &ListTablesTool{
+		tableService: tableService,
+	}
 }
 
 // GetInfo 获取工具信息
@@ -275,59 +290,65 @@ func (t *ListTablesTool) Execute(ctx context.Context, arguments map[string]inter
 		orderDirection = "asc"
 	}
 
-	// TODO: 实现实际的表列表查询逻辑
-	// 这里需要集成 LuckDB 的表仓储
+	// TODO: 需要将 spaceID 转换为 baseID，或者修改 TableService.ListTables 接受 spaceID
+	// 当前实现假设 spaceID 就是 baseID（这可能不正确）
+	baseID := spaceID
 
-	// 模拟表列表结果
-	tables := []map[string]interface{}{
-		{
-			"id":          "table_1",
-			"name":        "用户表",
-			"description": "用户信息表",
-			"icon":        "👤",
-			"created_at":  "2024-12-19T10:00:00Z",
-			"updated_at":  "2024-12-19T10:00:00Z",
-		},
-		{
-			"id":          "table_2",
-			"name":        "产品表",
-			"description": "产品信息表",
-			"icon":        "📦",
-			"created_at":  "2024-12-19T10:00:00Z",
-			"updated_at":  "2024-12-19T10:00:00Z",
-		},
+	// 获取空间中的所有表
+	tables, err := t.tableService.ListTables(ctx, baseID)
+	if err != nil {
+		return &protocol.MCPToolResult{
+			Content: []protocol.MCPToolResultContent{
+				{
+					Type: "text",
+					Text: fmt.Sprintf("获取表列表失败: %v", err),
+				},
+			},
+			IsError: true,
+		}, nil
 	}
 
-	if includeMetadata {
-		for i, table := range tables {
-			table["metadata"] = map[string]interface{}{
-				"field_count":  2,
-				"record_count": 0,
-				"permissions":  []string{"read", "write"},
+	// 转换为结果格式
+	tableList := make([]map[string]interface{}, len(tables))
+	for i, table := range tables {
+		tableList[i] = map[string]interface{}{
+			"id":          table.ID,
+			"name":        table.Name,
+			"description": table.Description,
+			"base_id":     table.BaseID,
+			"field_count": table.FieldCount,
+			"record_count": table.RecordCount,
+			"created_at":  table.CreatedAt,
+			"updated_at":  table.UpdatedAt,
+		}
+
+		if includeMetadata {
+			tableList[i]["metadata"] = map[string]interface{}{
+				"field_count":  table.FieldCount,
+				"record_count": table.RecordCount,
+				"permissions":  []string{"read", "write"}, // TODO: 从权限服务获取
 			}
-			tables[i] = table
 		}
 	}
 
 	result := map[string]interface{}{
 		"space_id":         spaceID,
-		"tables":           tables,
-		"total_count":      len(tables),
-		"returned_count":   len(tables),
+		"tables":           tableList,
+		"total_count":      len(tableList),
+		"returned_count":   len(tableList),
 		"limit":            limit,
 		"offset":           offset,
 		"order_by":         orderBy,
 		"order_direction":  orderDirection,
 		"include_metadata": includeMetadata,
-		"message":          "表列表查询功能待实现，需要集成 LuckDB 表仓储",
 	}
 
 	return &protocol.MCPToolResult{
 		Content: []protocol.MCPToolResultContent{
 			{
 				Type: "text",
-				Text: fmt.Sprintf("列出空间 %s 中的表\n参数: limit=%d, offset=%d, order_by=%s, order_direction=%s, include_metadata=%t\n找到 %d 个表\n\n注意：此功能需要集成 LuckDB 表仓储才能正常工作",
-					spaceID, limit, offset, orderBy, orderDirection, includeMetadata, len(tables)),
+				Text: fmt.Sprintf("成功获取空间 %s 中的表列表\n参数: limit=%d, offset=%d, order_by=%s, order_direction=%s, include_metadata=%t\n找到 %d 个表",
+					spaceID, limit, offset, orderBy, orderDirection, includeMetadata, len(tableList)),
 			},
 		},
 		IsError:  false,

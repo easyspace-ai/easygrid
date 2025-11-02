@@ -1,29 +1,82 @@
 /**
- * Demo 配置
- * 
- * 这里配置你的 LuckDB 后端地址和测试账号
+ * EasyGrid Demo 配置文件
+ * 基于新版SDK和API端点
  */
 
 export const config = {
-  // LuckDB API 地址
-  baseURL: (import.meta as any).env?.VITE_API_BASE_URL || 'http://localhost:8080',
+  // API 配置
+  baseURL: 'http://localhost:8080',
+  wsUrl: 'ws://localhost:8080/socket',
 
-  // WebSocket 地址（可选）
-  wsURL: (import.meta as any).env?.VITE_WS_URL || 'ws://localhost:8080',
-
-  // 测试账号（仅用于演示）
-  demo: {
-    email: 'admin@126.com',
-    password: 'Pmker123',
-  },
-
-  // 测试数据
-  testBase: {
-    baseId: (import.meta as any).env?.VITE_BASE_ID || 'ece04dea-70bd-43e4-87b8-35af518caa5a',
-    tableId: (import.meta as any).env?.VITE_TABLE_ID || 'tbl_oz9EbQgbTZBuF7FSSJvet',
-    viewId: (import.meta as any).env?.VITE_VIEW_ID || 'viw_F0SqlG0Y2m2kLX7cqjYX4',
-  },
-
-  // 是否启用调试模式
+  // 调试配置
   debug: true,
-};
+
+  // 测试账户配置
+  testCredentials: {
+    email: 'admin@126.com',
+    password: 'Pmker123'
+  },
+
+  // 测试表格配置
+  testTable: {
+    spaceId: 'spc_rtpLk96gJHLeYTv7JJMlo',
+    baseId: '7ec1e878-91b9-4c1b-ad86-05cdf801318f',
+    tableId: 'tbl_Pweb3NpbtiUb4Fwbi90WP'
+  },
+  
+  // Grid 配置
+  grid: {
+    rowHeight: 32,
+    columnWidth: 150,
+    freezeColumnCount: 1
+  },
+  
+  // ShareDB 配置
+  sharedb: {
+    reconnect: {
+      maxRetries: 10,
+      retryDelay: 1000,
+      exponentialBackoff: true
+    },
+    heartbeat: {
+      interval: 30000,
+      timeout: 10000
+    }
+  }
+}
+
+// 导出便捷访问函数
+export function getApiUrl(): string {
+  return config.baseURL
+}
+
+export function getWsUrl(): string {
+  return config.wsUrl
+}
+
+export function getTestCredentials() {
+  return config.testCredentials
+}
+
+export function getTestTable() {
+  return config.testTable
+}
+
+export function getGridConfig() {
+  return config.grid
+}
+
+export function getShareDBConfig() {
+  return config.sharedb
+}
+
+// 打印当前配置（用于调试）
+export function printConfig() {
+  console.log('📋 EasyGrid Demo 配置:')
+  console.log(`  API URL: ${config.baseURL}`)
+  console.log(`  WebSocket URL: ${config.wsUrl}`)
+  console.log(`  测试邮箱: ${config.testCredentials.email}`)
+  console.log(`  调试模式: ${config.debug}`)
+  console.log(`  表格ID: ${config.testTable.tableId}`)
+  console.log('')
+}

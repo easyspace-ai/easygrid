@@ -27,7 +27,7 @@ func (m *SubmitMiddleware) Handle(ctx context.Context, conn *sharedb.Connection,
 	if msg.Action == "op" && msg.Collection != "" {
 		// 解析集合类型
 		collectionInfo := parseCollection(msg.Collection)
-		
+
 		// 只允许 record 类型的操作
 		if collectionInfo.Type != sharedb.DocumentTypeRecord {
 			m.logger.Warn("Operation rejected: only record operations are allowed",
@@ -58,15 +58,15 @@ func parseCollection(collection string) *sharedb.CollectionInfo {
 			DocumentID: collection,
 		}
 	}
-	
+
 	// 处理 "rec_" 前缀的集合名称
 	docType := sharedb.DocumentType(parts[0])
 	if string(docType) == "rec" {
 		docType = sharedb.DocumentTypeRecord
 	}
-	
+
 	tableID := parts[1]
-	
+
 	return &sharedb.CollectionInfo{
 		Type:       docType,
 		TableID:    tableID,

@@ -391,6 +391,7 @@ func (s *MigrateService) runAutoMigrate(db *gorm.DB) error {
 		&models.View{}, // ✅ View模型已实现
 		&models.Permission{},
 		&models.Attachment{},
+		&models.UploadToken{}, // ✅ 上传令牌模型
 		&models.Collaborator{},
 		// &models.Invitation{},        // TODO: Invitation模型待实现
 		// &models.InvitationRecord{},  // TODO: InvitationRecord模型待实现

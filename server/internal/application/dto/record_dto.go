@@ -15,9 +15,9 @@ type CreateRecordRequest struct {
 // UpdateRecordRequest 更新记录请求
 type UpdateRecordRequest struct {
 	// Teable 格式支持
-	FieldKeyType string                   `json:"fieldKeyType,omitempty"` // "id" or "name"
-	Record       *UpdateRecordData        `json:"record,omitempty"`        // 嵌套的 record 对象
-	
+	FieldKeyType string            `json:"fieldKeyType,omitempty"` // "id" or "name"
+	Record       *UpdateRecordData `json:"record,omitempty"`       // 嵌套的 record 对象
+
 	// 兼容格式
 	Data    map[string]interface{} `json:"data,omitempty"`    // 直接的数据字段
 	Version *int                   `json:"version,omitempty"` // 可选的版本号，用于乐观锁

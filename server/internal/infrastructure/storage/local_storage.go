@@ -52,6 +52,13 @@ func (s *LocalStorage) Upload(ctx context.Context, path string, reader io.Reader
 	}
 	defer file.Close()
 
+	s.logger.Info("LocalStorage.Upload: creating file",
+		logger.String("base_path", s.basePath),
+		logger.String("relative_path", path),
+		logger.String("full_path", fullPath),
+		logger.Int64("size", size),
+	)
+
 	// 复制文件内容
 	written, err := io.Copy(file, reader)
 	if err != nil {
@@ -121,9 +128,18 @@ func (s *LocalStorage) Delete(ctx context.Context, path string) error {
 func (s *LocalStorage) Exists(ctx context.Context, path string) (bool, error) {
 	fullPath := filepath.Join(s.basePath, path)
 
+	s.logger.Info("LocalStorage.Exists: checking file",
+		logger.String("base_path", s.basePath),
+		logger.String("relative_path", path),
+		logger.String("full_path", fullPath),
+	)
+
 	_, err := os.Stat(fullPath)
 	if err != nil {
 		if os.IsNotExist(err) {
+			s.logger.Warn("LocalStorage.Exists: file not found",
+				logger.String("full_path", fullPath),
+			)
 			return false, nil
 		}
 		s.logger.Error("Failed to check file existence",
@@ -133,6 +149,9 @@ func (s *LocalStorage) Exists(ctx context.Context, path string) (bool, error) {
 		return false, fmt.Errorf("failed to check file existence: %w", err)
 	}
 
+	s.logger.Info("LocalStorage.Exists: file found",
+		logger.String("full_path", fullPath),
+	)
 	return true, nil
 }
 

@@ -58,4 +58,3 @@ func (c *FormulaCalculator) Calculate(
 
 	return result, nil
 }
-

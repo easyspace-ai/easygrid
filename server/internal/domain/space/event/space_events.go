@@ -2,9 +2,9 @@ package event
 
 import (
 	"time"
-	
-	"github.com/google/uuid"
+
 	"github.com/easyspace-ai/luckdb/server/internal/domain/space/valueobject"
+	"github.com/google/uuid"
 )
 
 // DomainEvent 领域事件接口
@@ -88,10 +88,10 @@ func NewMemberAdded(
 	}
 }
 
-func (e *MemberAdded) SpaceID() valueobject.SpaceID           { return e.spaceID }
-func (e *MemberAdded) UserID() string                         { return e.userID }
-func (e *MemberAdded) Role() valueobject.CollaboratorRole     { return e.role }
-func (e *MemberAdded) AddedBy() string                        { return e.addedBy }
+func (e *MemberAdded) SpaceID() valueobject.SpaceID       { return e.spaceID }
+func (e *MemberAdded) UserID() string                     { return e.userID }
+func (e *MemberAdded) Role() valueobject.CollaboratorRole { return e.role }
+func (e *MemberAdded) AddedBy() string                    { return e.addedBy }
 
 // MemberRemoved 成员移除事件
 type MemberRemoved struct {
@@ -144,10 +144,10 @@ func NewMemberRoleChanged(
 	}
 }
 
-func (e *MemberRoleChanged) SpaceID() valueobject.SpaceID           { return e.spaceID }
-func (e *MemberRoleChanged) UserID() string                         { return e.userID }
-func (e *MemberRoleChanged) NewRole() valueobject.CollaboratorRole  { return e.newRole }
-func (e *MemberRoleChanged) ChangedBy() string                      { return e.changedBy }
+func (e *MemberRoleChanged) SpaceID() valueobject.SpaceID          { return e.spaceID }
+func (e *MemberRoleChanged) UserID() string                        { return e.userID }
+func (e *MemberRoleChanged) NewRole() valueobject.CollaboratorRole { return e.newRole }
+func (e *MemberRoleChanged) ChangedBy() string                     { return e.changedBy }
 
 // OwnershipTransferred 所有权转让事件
 type OwnershipTransferred struct {
@@ -173,4 +173,3 @@ func NewOwnershipTransferred(
 func (e *OwnershipTransferred) SpaceID() valueobject.SpaceID { return e.spaceID }
 func (e *OwnershipTransferred) OldOwnerID() string           { return e.oldOwnerID }
 func (e *OwnershipTransferred) NewOwnerID() string           { return e.newOwnerID }
-

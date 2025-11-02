@@ -1,8 +1,10 @@
 package sharedb
 
 import (
+	"context"
+	"sync"
 	"time"
-	
+
 	"github.com/easyspace-ai/luckdb/server/pkg/errors"
 )
 
@@ -65,13 +67,13 @@ type Snapshot struct {
 
 // Message ShareDB 协议消息
 type Message struct {
-	Action     string        `json:"a"`
-	Collection string        `json:"c,omitempty"`
-	DocID      string        `json:"d,omitempty"`
-	Version    int64         `json:"v,omitempty"`
-	Op         []OTOperation  `json:"op,omitempty"`
-	Create     *CreateData   `json:"create,omitempty"`
-	Data       interface{}   `json:"data,omitempty"`
+	Action     string               `json:"a"`
+	Collection string               `json:"c,omitempty"`
+	DocID      string               `json:"d,omitempty"`
+	Version    int64                `json:"v,omitempty"`
+	Op         []OTOperation        `json:"op,omitempty"`
+	Create     *CreateData          `json:"create,omitempty"`
+	Data       interface{}          `json:"data,omitempty"`
 	Error      *errors.ShareDBError `json:"error,omitempty"`
 	// Presence 相关
 	Presence map[string]interface{} `json:"presence,omitempty"`
@@ -83,15 +85,15 @@ type Message struct {
 
 // Operation ShareDB 操作（通用操作类型）
 type Operation struct {
-	Type       OpType        `json:"type"`       // 操作类型
-	Op         []OTOperation `json:"op"`         // OT 操作列表
-	Version    int64         `json:"v"`          // 版本号
-	Source     string        `json:"src"`        // 操作来源
-	Collection string        `json:"c"`          // 集合名
-	DocID      string        `json:"d"`          // 文档ID
-	Create     *CreateData   `json:"create"`     // 创建数据（仅创建操作）
-	Del        bool          `json:"del"`        // 删除标记（仅删除操作）
-	Seq        int           `json:"seq"`        // 序列号
+	Type       OpType        `json:"type"`   // 操作类型
+	Op         []OTOperation `json:"op"`     // OT 操作列表
+	Version    int64         `json:"v"`      // 版本号
+	Source     string        `json:"src"`    // 操作来源
+	Collection string        `json:"c"`      // 集合名
+	DocID      string        `json:"d"`      // 文档ID
+	Create     *CreateData   `json:"create"` // 创建数据（仅创建操作）
+	Del        bool          `json:"del"`    // 删除标记（仅删除操作）
+	Seq        int           `json:"seq"`    // 序列号
 }
 
 // Error ShareDB 错误
@@ -102,11 +104,13 @@ type Error struct {
 
 // Connection 连接信息
 type Connection struct {
-	ID        string
-	UserID    string
-	LastSeen  time.Time
-	IsActive  bool
-	CreatedAt time.Time
+	ID            string
+	UserID        string
+	LastSeen      time.Time
+	IsActive      bool
+	CreatedAt     time.Time
+	mu            sync.RWMutex
+	subCancelFuncs map[string]context.CancelFunc // channel -> cancelFunc
 }
 
 // PresenceData 在线状态数据
@@ -136,8 +140,7 @@ const (
 
 // CollectionInfo 集合信息
 type CollectionInfo struct {
-	Type         DocumentType
-	TableID      string
-	DocumentID   string
+	Type       DocumentType
+	TableID    string
+	DocumentID string
 }
-

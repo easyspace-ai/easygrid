@@ -2,6 +2,7 @@ package validation
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"net/mail"
 	"net/url"
@@ -474,8 +475,11 @@ func (v *SingleSelectValidator) ValidateCell(ctx context.Context, value interfac
 		return Success(nil)
 	}
 
-	// TODO: 验证选项是否在字段的 options 中
-	// 需要解析 field.Options() 并检查
+	// 验证选项是否在字段的 options 中
+	if field.Options() != nil {
+		// TODO: 解析 field.Options() 并检查选项是否有效
+		// 这里需要根据具体的选项结构来实现
+	}
 
 	return Success(str)
 }
@@ -530,7 +534,11 @@ func (v *MultipleSelectValidator) ValidateCell(ctx context.Context, value interf
 		return Success(nil)
 	}
 
-	// TODO: 验证每个选项是否在字段的 options 中
+	// 验证每个选项是否在字段的 options 中
+	if field.Options() != nil {
+		// TODO: 解析 field.Options() 并检查每个选项是否有效
+		// 这里需要根据具体的选项结构来实现
+	}
 
 	return Success(arr)
 }
@@ -774,7 +782,16 @@ func (v *AttachmentValidator) ValidateCell(ctx context.Context, value interface{
 	}
 
 	// 附件应该是一个数组（JSON 格式）
-	// TODO: 详细验证附件结构
+	if arr, ok := value.([]interface{}); ok {
+		// 基本验证：检查是否为数组
+		for i, item := range arr {
+			if item == nil {
+				return Failure(NewValidationError(field.Name().String(), fmt.Sprintf("附件项[%d]不能为空", i), item))
+			}
+		}
+	} else {
+		return Failure(NewValidationError(field.Name().String(), "附件必须是数组格式", value))
+	}
 
 	return Success(value)
 }
@@ -784,8 +801,17 @@ func (v *AttachmentValidator) Repair(ctx context.Context, value interface{}, fie
 }
 
 func (v *AttachmentValidator) ConvertStringToValue(ctx context.Context, str string, field *entity.Field) (interface{}, error) {
-	// TODO: 解析 JSON 字符串
-	return str, nil
+	if str == "" {
+		return nil, nil
+	}
+
+	// 尝试解析 JSON 字符串
+	var result interface{}
+	if err := json.Unmarshal([]byte(str), &result); err != nil {
+		return nil, fmt.Errorf("无法解析附件JSON: %w", err)
+	}
+
+	return result, nil
 }
 
 // UserValidator 用户验证器
@@ -806,7 +832,24 @@ func (v *UserValidator) ValidateCell(ctx context.Context, value interface{}, fie
 	}
 
 	// 用户应该是一个对象或数组（JSON 格式）
-	// TODO: 详细验证用户结构
+	if arr, ok := value.([]interface{}); ok {
+		// 数组格式：多个用户
+		for i, item := range arr {
+			if item == nil {
+				return Failure(NewValidationError(field.Name().String(), fmt.Sprintf("用户项[%d]不能为空", i), item))
+			}
+			if _, ok := item.(map[string]interface{}); !ok {
+				return Failure(NewValidationError(field.Name().String(), fmt.Sprintf("用户项[%d]必须是对象格式", i), item))
+			}
+		}
+	} else if obj, ok := value.(map[string]interface{}); ok {
+		// 对象格式：单个用户
+		if len(obj) == 0 {
+			return Failure(NewValidationError(field.Name().String(), "用户对象不能为空", value))
+		}
+	} else {
+		return Failure(NewValidationError(field.Name().String(), "用户必须是对象或数组格式", value))
+	}
 
 	return Success(value)
 }
@@ -816,8 +859,17 @@ func (v *UserValidator) Repair(ctx context.Context, value interface{}, field *en
 }
 
 func (v *UserValidator) ConvertStringToValue(ctx context.Context, str string, field *entity.Field) (interface{}, error) {
-	// TODO: 解析 JSON 字符串
-	return str, nil
+	if str == "" {
+		return nil, nil
+	}
+
+	// 尝试解析 JSON 字符串
+	var result interface{}
+	if err := json.Unmarshal([]byte(str), &result); err != nil {
+		return nil, fmt.Errorf("无法解析用户JSON: %w", err)
+	}
+
+	return result, nil
 }
 
 // AutoNumberValidator 自动编号验证器

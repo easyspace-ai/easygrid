@@ -235,7 +235,7 @@ func (s *CrossTableCalculationService) CalculateCrossTable(
 
 	for _, targetData := range targetRecords {
 		for _, field := range calculateFields {
-		targetRecordID, _ := targetData["id"].(string)
+			targetRecordID, _ := targetData["id"].(string)
 			// 获取Link字段的值（关联的记录IDs）
 			linkValue := targetData[split.LinkFieldID]
 			linkedRecordIDs := s.extractRecordIDsFromLinkValue(linkValue)

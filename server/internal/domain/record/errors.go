@@ -5,28 +5,28 @@ import "errors"
 // 记录相关领域错误
 var (
 	// 记录基础错误
-	ErrRecordNotFound           = errors.New("record not found")
+	ErrRecordNotFound            = errors.New("record not found")
 	ErrCannotModifyDeletedRecord = errors.New("cannot modify deleted record")
-	ErrRecordAlreadyDeleted     = errors.New("record is already deleted")
-	
+	ErrRecordAlreadyDeleted      = errors.New("record is already deleted")
+
 	// 记录数据错误
-	ErrInvalidRecordData        = errors.New("invalid record data")
-	ErrEmptyRecordData          = errors.New("record data cannot be empty")
-	ErrMissingRequiredField     = errors.New("missing required field")
-	
+	ErrInvalidRecordData    = errors.New("invalid record data")
+	ErrEmptyRecordData      = errors.New("record data cannot be empty")
+	ErrMissingRequiredField = errors.New("missing required field")
+
 	// 记录验证错误
-	ErrValidationFailed         = errors.New("record validation failed")
-	ErrFieldValueInvalid        = errors.New("field value is invalid")
+	ErrValidationFailed          = errors.New("record validation failed")
+	ErrFieldValueInvalid         = errors.New("field value is invalid")
 	ErrUniqueConstraintViolation = errors.New("unique constraint violation")
-	ErrForeignKeyViolation      = errors.New("foreign key constraint violation")
-	
+	ErrForeignKeyViolation       = errors.New("foreign key constraint violation")
+
 	// 记录版本错误
-	ErrVersionConflict          = errors.New("version conflict (optimistic lock failed)")
-	ErrInvalidVersion           = errors.New("invalid record version")
-	
+	ErrVersionConflict = errors.New("version conflict (optimistic lock failed)")
+	ErrInvalidVersion  = errors.New("invalid record version")
+
 	// 批量操作错误
-	ErrBatchOperationFailed     = errors.New("batch operation failed")
-	ErrPartialSuccess           = errors.New("partial success in batch operation")
+	ErrBatchOperationFailed = errors.New("batch operation failed")
+	ErrPartialSuccess       = errors.New("partial success in batch operation")
 )
 
 // DomainError 领域错误类型
@@ -55,4 +55,3 @@ func NewDomainError(code, message string, err error) *DomainError {
 		Err:     err,
 	}
 }
-

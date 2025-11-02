@@ -24,14 +24,14 @@ func (b *ViewOpBuilder) SetViewProperty(key string, oldValue, newValue interface
 // CreateView 创建视图
 func (b *ViewOpBuilder) CreateView(viewID string, properties map[string]interface{}) sharedb.OTOperation {
 	ops := make([]sharedb.OTOperation, 0, len(properties))
-	
+
 	for key, value := range properties {
 		ops = append(ops, sharedb.OTOperation{
 			"p":  []interface{}{key},
 			"oi": value,
 		})
 	}
-	
+
 	return sharedb.OTOperation{
 		"p":  []interface{}{"views", viewID},
 		"oi": ops,
@@ -41,14 +41,14 @@ func (b *ViewOpBuilder) CreateView(viewID string, properties map[string]interfac
 // DeleteView 删除视图
 func (b *ViewOpBuilder) DeleteView(viewID string, properties map[string]interface{}) sharedb.OTOperation {
 	ops := make([]sharedb.OTOperation, 0, len(properties))
-	
+
 	for key, value := range properties {
 		ops = append(ops, sharedb.OTOperation{
 			"p":  []interface{}{key},
 			"od": value,
 		})
 	}
-	
+
 	return sharedb.OTOperation{
 		"p":  []interface{}{"views", viewID},
 		"od": ops,

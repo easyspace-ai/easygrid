@@ -11,6 +11,8 @@ import (
 	"github.com/easyspace-ai/luckdb/server/internal/domain/fields/valueobject"
 	"github.com/easyspace-ai/luckdb/server/internal/infrastructure/database/models"
 	"github.com/easyspace-ai/luckdb/server/internal/infrastructure/repository/mapper"
+	"github.com/easyspace-ai/luckdb/server/pkg/database"
+	"github.com/easyspace-ai/luckdb/server/pkg/logger"
 )
 
 // FieldRepositoryImpl 字段仓储实现
@@ -51,29 +53,75 @@ func (r *FieldRepositoryImpl) Save(ctx context.Context, field *entity.Field) err
 func (r *FieldRepositoryImpl) FindByID(ctx context.Context, id valueobject.FieldID) (*entity.Field, error) {
 	var dbField models.Field
 
+	fieldIDStr := id.String()
+	logger.Info("🔍 FieldRepositoryImpl.FindByID 开始查询数据库",
+		logger.String("field_id", fieldIDStr))
+
 	// ✅ 显式指定 schema
 	err := r.db.WithContext(ctx).
 		Table("field").
-		Where("id = ?", id.String()).
+		Where("id = ?", fieldIDStr).
 		Where("deleted_time IS NULL").
 		First(&dbField).Error
 
 	if err == gorm.ErrRecordNotFound {
+		logger.Warn("⚠️ FieldRepositoryImpl.FindByID 数据库查询结果为空（记录不存在）",
+			logger.String("field_id", fieldIDStr))
 		return nil, nil
 	}
 	if err != nil {
+		logger.Error("❌ FieldRepositoryImpl.FindByID 数据库查询失败",
+			logger.String("field_id", fieldIDStr),
+			logger.ErrorField(err))
 		return nil, fmt.Errorf("failed to find field: %w", err)
 	}
 
-	return mapper.ToFieldEntity(&dbField)
+	logger.Info("✅ FieldRepositoryImpl.FindByID 数据库查询成功",
+		logger.String("field_id", fieldIDStr),
+		logger.String("field_name", dbField.Name))
+
+	field, err := mapper.ToFieldEntity(&dbField)
+	if err != nil {
+		logger.Error("❌ FieldRepositoryImpl.FindByID 映射失败",
+			logger.String("field_id", fieldIDStr),
+			logger.ErrorField(err))
+		return nil, fmt.Errorf("failed to map field: %w", err)
+	}
+	if field == nil {
+		logger.Warn("⚠️ FieldRepositoryImpl.FindByID 映射结果为空",
+			logger.String("field_id", fieldIDStr))
+	}
+	
+	return field, nil
 }
 
 // FindByTableID 查找表的所有字段
 func (r *FieldRepositoryImpl) FindByTableID(ctx context.Context, tableID string) ([]*entity.Field, error) {
 	var dbFields []*models.Field
 
+	// ✅ 使用事务连接（如果存在）
+	db := database.WithTx(ctx, r.db)
+
+	// ✅ 检查是否在事务中
+	isInTx := database.InTransaction(ctx)
+	var txCtx *database.TxContext
+	if isInTx {
+		txCtx = database.GetTxContext(ctx)
+	}
+
+	logger.Info("🔍 FieldRepository.FindByTableID 开始查询",
+		logger.String("table_id", tableID),
+		logger.Bool("is_in_tx", isInTx),
+		logger.String("tx_id", func() string {
+			if txCtx != nil {
+				return txCtx.ID
+			}
+			return "none"
+		}()),
+		logger.Bool("using_tx_db", db != r.db))
+
 	// ✅ 查询元数据表，依赖默认 public schema
-	err := r.db.WithContext(ctx).
+	err := db.WithContext(ctx).
 		Table("field").
 		Where("table_id = ?", tableID).
 		Where("deleted_time IS NULL").
@@ -81,18 +129,41 @@ func (r *FieldRepositoryImpl) FindByTableID(ctx context.Context, tableID string)
 		Find(&dbFields).Error
 
 	if err != nil {
+		logger.Error("❌ FieldRepository.FindByTableID 查询失败",
+			logger.String("table_id", tableID),
+			logger.ErrorField(err))
 		return nil, fmt.Errorf("failed to find fields: %w", err)
 	}
 
-	return mapper.ToFieldList(dbFields)
+	// ✅ 添加详细日志：查询到的字段数量
+	logger.Info("FindByTableID 查询结果",
+		logger.String("table_id", tableID),
+		logger.Int("found_count", len(dbFields)),
+		logger.Any("field_ids", func() []string {
+			ids := make([]string, len(dbFields))
+			for i, f := range dbFields {
+				ids[i] = f.ID
+			}
+			return ids
+		}()))
+
+	result, err := mapper.ToFieldList(dbFields)
+	if err != nil {
+		return nil, err
+	}
+
+	return result, nil
 }
 
 // FindByName 根据名称查找字段
 func (r *FieldRepositoryImpl) FindByName(ctx context.Context, tableID string, name valueobject.FieldName) (*entity.Field, error) {
 	var dbField models.Field
 
+	// ✅ 使用事务连接（如果存在）
+	db := database.WithTx(ctx, r.db)
+
 	// ✅ 显式指定 schema
-	err := r.db.WithContext(ctx).
+	err := db.WithContext(ctx).
 		Table("field").
 		Where("table_id = ? AND name = ?", tableID, name.String()).
 		Where("deleted_time IS NULL").

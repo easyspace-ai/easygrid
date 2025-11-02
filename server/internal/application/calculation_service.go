@@ -3,6 +3,8 @@ package application
 import (
 	"context"
 	"regexp"
+	"sync"
+	"time"
 
 	"github.com/easyspace-ai/luckdb/server/internal/domain/calculation/dependency"
 	formulaPkg "github.com/easyspace-ai/luckdb/server/internal/domain/calculation/formula"
@@ -37,9 +39,22 @@ import (
 //   - Rollup: 关联记录汇总
 //   - Lookup: 关联记录查找
 //   - Count: 关联记录计数
+// CalculationService 计算服务（对齐原版ReferenceService）
 //
-// 对齐原版：
-//   - reference.service.ts - 计算协调
+// 设计哲学：
+//   - 单一职责：专注于虚拟字段的计算协调
+//   - 事件驱动：数据变化自动触发计算
+//   - 依赖感知：自动识别需要重算的字段
+//   - 性能优先：批量计算，拓扑优化，依赖图缓存
+//
+// 核心职责：
+//  1. 协调所有虚拟字段的计算
+//  2. 管理字段依赖关系
+//  3. 确保计算顺序正确
+//  4. 性能优化：依赖图缓存、批量计算
+//
+// 参考：
+//   - calculation.service.ts - 计算服务主逻辑
 //   - batch.service.ts - 批量计算
 //   - field-calculation.service.ts - 字段级计算
 type CalculationService struct {
@@ -48,6 +63,18 @@ type CalculationService struct {
 	rollupCalculator *rollup.RollupCalculator
 	lookupCalculator *lookup.LookupCalculator
 	businessEvents   events.BusinessEventPublisher // ✨ 业务事件发布器
+	
+	// ✅ 性能优化：依赖图缓存
+	depGraphCache map[string]*dependencyGraphCacheEntry // tableID -> 缓存项
+	depGraphMu    sync.RWMutex                         // 保护缓存并发访问
+}
+
+// dependencyGraphCacheEntry 依赖图缓存项
+type dependencyGraphCacheEntry struct {
+	graph    []dependency.GraphItem
+	fields   []*fieldEntity.Field
+	version  int64 // 字段版本号，用于缓存失效（基于字段更新时间）
+	lastUsed time.Time
 }
 
 // NewCalculationService 创建计算服务（完美架构）
@@ -62,6 +89,7 @@ func NewCalculationService(
 		rollupCalculator: rollup.NewRollupCalculator("UTC"), // 默认UTC时区
 		lookupCalculator: lookup.NewLookupCalculator(),
 		businessEvents:   businessEvents, // ✨ 注入业务事件发布器
+		depGraphCache:    make(map[string]*dependencyGraphCacheEntry),
 	}
 }
 
@@ -93,7 +121,13 @@ func (s *CalculationService) CalculateRecordFields(ctx context.Context, record *
 		return errors.ErrDatabaseQuery.WithDetails(err.Error())
 	}
 
-	// 2. 过滤虚拟字段
+	return s.CalculateRecordFieldsWithFields(ctx, record, fields)
+}
+
+// CalculateRecordFieldsWithFields 使用预加载的字段计算Record的所有虚拟字段
+// ✅ 优化：避免N+1查询问题
+// 在批量处理多个记录时，可以先预加载字段，然后调用此方法
+func (s *CalculationService) CalculateRecordFieldsWithFields(ctx context.Context, record *entity.Record, fields []*fieldEntity.Field) error {
 	virtualFields := s.filterVirtualFields(fields)
 	if len(virtualFields) == 0 {
 		logger.Debug("no virtual fields to calculate",
@@ -110,7 +144,8 @@ func (s *CalculationService) CalculateRecordFields(ctx context.Context, record *
 	)
 
 	// 3. 构建依赖图（传入所有字段，以便查找依赖）
-	depGraph := s.buildDependencyGraph(fields)
+	// ✅ 使用缓存优化
+	depGraph := s.getCachedDependencyGraph(ctx, record.TableID(), fields)
 
 	logger.Info("🔧 依赖图构建完成",
 		logger.String("record_id", record.ID().String()),
@@ -310,7 +345,8 @@ func (s *CalculationService) CalculateAffectedFields(ctx context.Context, record
 	}
 
 	// 2. 构建完整依赖图
-	depGraph := s.buildDependencyGraph(fields)
+	// ✅ 使用缓存优化
+	depGraph := s.getCachedDependencyGraph(ctx, record.TableID(), fields)
 	logger.Info("📊 依赖图构建完成",
 		logger.String("record_id", record.ID().String()),
 		logger.Int("depGraph_size", len(depGraph)))
@@ -748,7 +784,78 @@ func (s *CalculationService) filterVirtualFields(fields []*fieldEntity.Field) []
 	return result
 }
 
-// buildDependencyGraph 构建字段依赖图
+// getCachedDependencyGraph 获取缓存的依赖图（优化性能）
+// ✅ 优化：避免重复构建依赖图
+func (s *CalculationService) getCachedDependencyGraph(ctx context.Context, tableID string, fields []*fieldEntity.Field) []dependency.GraphItem {
+	// 计算字段版本号（基于字段的更新时间）
+	fieldVersion := s.calculateFieldVersion(fields)
+	
+	// 尝试从缓存获取
+	s.depGraphMu.RLock()
+	if entry, exists := s.depGraphCache[tableID]; exists {
+		// 检查版本是否匹配
+		if entry.version == fieldVersion {
+			entry.lastUsed = time.Now()
+			graph := entry.graph
+			s.depGraphMu.RUnlock()
+			
+			logger.Debug("依赖图缓存命中",
+				logger.String("table_id", tableID),
+				logger.Int("graph_size", len(graph)))
+			return graph
+		}
+		// 版本不匹配，需要重新构建
+		logger.Debug("依赖图缓存版本不匹配，需要重建",
+			logger.String("table_id", tableID),
+			logger.Int64("cached_version", entry.version),
+			logger.Int64("current_version", fieldVersion))
+	}
+	s.depGraphMu.RUnlock()
+	
+	// 缓存未命中或版本不匹配，构建新的依赖图
+	graph := s.buildDependencyGraph(fields)
+	
+	// 更新缓存
+	s.depGraphMu.Lock()
+	s.depGraphCache[tableID] = &dependencyGraphCacheEntry{
+		graph:    graph,
+		fields:   fields,
+		version:  fieldVersion,
+		lastUsed: time.Now(),
+	}
+	s.depGraphMu.Unlock()
+	
+	logger.Debug("依赖图已缓存",
+		logger.String("table_id", tableID),
+		logger.Int("graph_size", len(graph)),
+		logger.Int64("version", fieldVersion))
+	
+	return graph
+}
+
+// calculateFieldVersion 计算字段版本号（基于字段的更新时间）
+func (s *CalculationService) calculateFieldVersion(fields []*fieldEntity.Field) int64 {
+	var maxTimestamp int64
+	for _, field := range fields {
+		// 使用字段的更新时间作为版本号的一部分
+		// 简化实现：使用字段数量 + 字段ID的哈希值
+		timestamp := field.UpdatedAt().Unix()
+		if timestamp > maxTimestamp {
+			maxTimestamp = timestamp
+		}
+	}
+	return maxTimestamp
+}
+
+// invalidateDependencyGraphCache 使依赖图缓存失效
+func (s *CalculationService) invalidateDependencyGraphCache(tableID string) {
+	s.depGraphMu.Lock()
+	delete(s.depGraphCache, tableID)
+	s.depGraphMu.Unlock()
+	
+	logger.Debug("依赖图缓存已失效",
+		logger.String("table_id", tableID))
+}
 // 返回：dependency.GraphItem切片，用于拓扑排序
 //
 // 依赖关系：

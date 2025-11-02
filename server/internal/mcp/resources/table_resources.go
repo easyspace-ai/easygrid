@@ -55,37 +55,24 @@ func (r *TableSchemaResource) Read(ctx context.Context, uri string) (*protocol.M
 	}
 
 	// TODO: 实现实际的表结构查询逻辑
-	// 这里需要集成 LuckDB 的表仓储和字段仓储
-
-	// 模拟表结构数据
-	schema := map[string]interface{}{
+	// 实现步骤：
+	//  1. 注入TableService和FieldService到TableResource结构体
+	//  2. 验证tableID和spaceID的有效性
+	//  3. 调用TableService.GetTable(ctx, tableID)获取表信息
+	//  4. 调用FieldService.GetFieldsByTableID(ctx, tableID)获取字段列表
+	//  5. 组装并返回表结构数据
+	
+	// 当前返回实现指导信息
+	_ = map[string]interface{}{
 		"table_id":    tableID,
 		"space_id":    spaceID,
-		"name":        "示例表",
-		"description": "这是一个示例表",
-		"icon":        "📊",
-		"created_at":  "2024-12-19T10:00:00Z",
-		"updated_at":  "2024-12-19T10:00:00Z",
-		"version":     1,
-		"fields": []map[string]interface{}{
-			{
-				"id":          "field_1",
-				"name":        "ID",
-				"type":        "number",
-				"description": "主键字段",
-				"is_primary":  true,
-				"is_required": true,
-				"order":       1.0,
-			},
-			{
-				"id":          "field_2",
-				"name":        "名称",
-				"type":        "text",
-				"description": "名称字段",
-				"is_primary":  false,
-				"is_required": true,
-				"order":       2.0,
-			},
+		"status":      "not_implemented",
+		"message":     "表结构查询功能需要集成TableService和FieldService",
+		"next_steps": []string{
+			"在TableResource中注入TableService和FieldService",
+			"实现表ID和空间ID验证",
+			"调用TableService.GetTable方法",
+			"调用FieldService.GetFieldsByTableID方法",
 		},
 	}
 
@@ -93,35 +80,9 @@ func (r *TableSchemaResource) Read(ctx context.Context, uri string) (*protocol.M
 	jsonData := fmt.Sprintf(`{
 		"table_id": "%s",
 		"space_id": "%s",
-		"name": "%s",
-		"description": "%s",
-		"icon": "%s",
-		"created_at": "%s",
-		"updated_at": "%s",
-		"version": %d,
-		"fields": [
-			{
-				"id": "field_1",
-				"name": "ID",
-				"type": "number",
-				"description": "主键字段",
-				"is_primary": true,
-				"is_required": true,
-				"order": 1.0
-			},
-			{
-				"id": "field_2",
-				"name": "名称",
-				"type": "text",
-				"description": "名称字段",
-				"is_primary": false,
-				"is_required": true,
-				"order": 2.0
-			}
-		],
-		"message": "表结构查询功能待实现，需要集成 LuckDB 表仓储和字段仓储"
-	}`, tableID, spaceID, schema["name"], schema["description"], schema["icon"],
-		schema["created_at"], schema["updated_at"], schema["version"])
+		"status": "%s",
+		"message": "%s"
+	}`, tableID, spaceID, "not_implemented", "表结构查询功能需要集成TableService和FieldService")
 
 	return &protocol.MCPResourceContent{
 		URI:      uri,
@@ -178,34 +139,23 @@ func (r *TableDataResource) Read(ctx context.Context, uri string) (*protocol.MCP
 	}
 
 	// TODO: 实现实际的记录数据查询逻辑
-	// 这里需要集成 LuckDB 的记录仓储
-
-	// 模拟记录数据
+	// 实现步骤：
+	//  1. 注入RecordService到TableDataResource结构体
+	//  2. 验证tableID和spaceID的有效性
+	//  3. 调用RecordService.GetRecords(ctx, tableID, filters)获取记录列表
+	//  4. 返回记录数据
+	
+	// 当前返回实现指导信息
 	jsonData := fmt.Sprintf(`{
 		"table_id": "%s",
 		"space_id": "%s",
-		"records": [
-			{
-				"id": "record_1",
-				"data": {
-					"ID": 1,
-					"名称": "示例记录1"
-				},
-				"created_at": "2024-12-19T10:00:00Z",
-				"updated_at": "2024-12-19T10:00:00Z"
-			},
-			{
-				"id": "record_2",
-				"data": {
-					"ID": 2,
-					"名称": "示例记录2"
-				},
-				"created_at": "2024-12-19T10:00:00Z",
-				"updated_at": "2024-12-19T10:00:00Z"
-			}
-		],
-		"total_count": 2,
-		"message": "记录数据查询功能待实现，需要集成 LuckDB 记录仓储"
+		"status": "not_implemented",
+		"message": "记录数据查询功能需要集成RecordService",
+		"next_steps": [
+			"在TableDataResource中注入RecordService",
+			"实现表ID和空间ID验证",
+			"调用RecordService.GetRecords方法"
+		]
 	}`, tableID, spaceID)
 
 	return &protocol.MCPResourceContent{
@@ -264,28 +214,25 @@ func (r *TableMetadataResource) Read(ctx context.Context, uri string) (*protocol
 	}
 
 	// TODO: 实现实际的元数据查询逻辑
-	// 这里需要集成 LuckDB 的表仓储和记录仓储
-
-	// 模拟元数据
+	// 实现步骤：
+	//  1. 注入TableService和RecordService到TableMetadataResource结构体
+	//  2. 验证tableID和spaceID的有效性
+	//  3. 调用TableService.GetTable(ctx, tableID)获取表信息
+	//  4. 调用RecordService.GetRecordCount(ctx, tableID)获取记录数量
+	//  5. 组装并返回元数据信息
+	
+	// 当前返回实现指导信息
 	jsonData := fmt.Sprintf(`{
 		"table_id": "%s",
 		"space_id": "%s",
-		"metadata": {
-			"record_count": 2,
-			"field_count": 2,
-			"last_modified": "2024-12-19T10:00:00Z",
-			"permissions": ["read", "write"],
-			"storage_size": "1KB",
-			"indexes": [],
-			"constraints": []
-		},
-		"statistics": {
-			"creation_date": "2024-12-19T10:00:00Z",
-			"last_accessed": "2024-12-19T10:00:00Z",
-			"access_count": 0,
-			"modification_count": 0
-		},
-		"message": "元数据查询功能待实现，需要集成 LuckDB 表仓储和记录仓储"
+		"status": "not_implemented",
+		"message": "元数据查询功能需要集成TableService和RecordService",
+		"next_steps": [
+			"在TableMetadataResource中注入TableService和RecordService",
+			"实现表ID和空间ID验证",
+			"调用TableService.GetTable方法",
+			"调用RecordService.GetRecordCount方法"
+		]
 	}`, tableID, spaceID)
 
 	return &protocol.MCPResourceContent{
@@ -295,4 +242,3 @@ func (r *TableMetadataResource) Read(ctx context.Context, uri string) (*protocol
 		Blob:     nil,
 	}, nil
 }
-

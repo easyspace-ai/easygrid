@@ -87,32 +87,64 @@ func (g *DependencyGraph) Build(ctx context.Context, tableID string) error {
 
 // extractDependencies 提取字段依赖
 func (g *DependencyGraph) extractDependencies(field *entity.Field) []string {
-	// TODO: 根据字段类型和 options 提取依赖
-	// Formula: 解析表达式
-	// Lookup: lookupFieldId
-	// Rollup: linkFieldId + rollupFieldId
-	// Count: linkFieldId
+	dependencies := []string{}
 
+	// 根据字段类型和 options 提取依赖
 	switch field.Type().String() {
 	case "formula":
-		// TODO: 解析 formula 表达式，提取字段引用
-		return []string{}
+		// 解析 formula 表达式，提取字段引用
+		dependencies = g.extractFormulaDependencies(field)
 
 	case "lookup":
-		// TODO: 从 options 中提取 lookupFieldId
-		return []string{}
+		// 从 options 中提取 lookupFieldId
+		dependencies = g.extractLookupDependencies(field)
 
 	case "rollup":
-		// TODO: 从 options 中提取 linkFieldId 和 rollupFieldId
-		return []string{}
+		// 从 options 中提取 linkFieldId 和 rollupFieldId
+		dependencies = g.extractRollupDependencies(field)
 
 	case "count":
-		// TODO: 从 options 中提取 linkFieldId
-		return []string{}
+		// 从 options 中提取 linkFieldId
+		dependencies = g.extractCountDependencies(field)
 
 	default:
+		// 其他字段类型通常没有依赖
 		return []string{}
 	}
+
+	return dependencies
+}
+
+// extractFormulaDependencies 提取公式字段的依赖
+func (g *DependencyGraph) extractFormulaDependencies(field *entity.Field) []string {
+	// TODO: 实现公式表达式解析
+	// 需要解析表达式中的字段引用，如 {fieldName} 或 {fieldId}
+	// 暂时返回空列表
+	return []string{}
+}
+
+// extractLookupDependencies 提取Lookup字段的依赖
+func (g *DependencyGraph) extractLookupDependencies(field *entity.Field) []string {
+	// TODO: 从 options 中提取 lookupFieldId
+	// 需要解析 LookupOptions 结构
+	// 暂时返回空列表
+	return []string{}
+}
+
+// extractRollupDependencies 提取Rollup字段的依赖
+func (g *DependencyGraph) extractRollupDependencies(field *entity.Field) []string {
+	// TODO: 从 options 中提取 linkFieldId 和 rollupFieldId
+	// 需要解析 RollupOptions 结构
+	// 暂时返回空列表
+	return []string{}
+}
+
+// extractCountDependencies 提取Count字段的依赖
+func (g *DependencyGraph) extractCountDependencies(field *entity.Field) []string {
+	// TODO: 从 options 中提取 linkFieldId
+	// 需要解析 CountOptions 结构
+	// 暂时返回空列表
+	return []string{}
 }
 
 // GetAffectedFields 获取受影响的字段（拓扑排序）

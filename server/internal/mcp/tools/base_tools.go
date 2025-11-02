@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 
+	"github.com/easyspace-ai/luckdb/server/internal/application"
 	"github.com/easyspace-ai/luckdb/server/internal/mcp/protocol"
 )
 
@@ -33,32 +34,69 @@ type Tool interface {
 	ValidateArguments(arguments map[string]interface{}) error
 }
 
-// NewBaseToolService 创建基础工具服务
+// NewBaseToolServiceWithDependencies 创建带依赖注入的工具服务
+func NewBaseToolServiceWithDependencies(
+	tableService *application.TableService,
+	fieldService *application.FieldService,
+	recordService *application.RecordService,
+) *BaseToolService {
+	service := &BaseToolService{
+		tools: make(map[string]Tool),
+	}
+
+	// 注册带依赖的工具
+	service.registerToolsWithDependencies(tableService, fieldService, recordService)
+
+	return service
+}
+
+// registerToolsWithDependencies 注册带依赖的工具
+func (s *BaseToolService) registerToolsWithDependencies(
+	tableService *application.TableService,
+	fieldService *application.FieldService,
+	recordService *application.RecordService,
+) {
+	// 结构管理工具
+	s.RegisterTool(NewGetTableSchemaTool(tableService, fieldService))
+	s.RegisterTool(NewListTablesTool(tableService))
+
+	// 数据操作工具
+	s.RegisterTool(NewCreateRecordTool(recordService))
+	// TODO: 以下工具需要实现服务注入
+	s.RegisterTool(NewUpdateRecordTool())
+	s.RegisterTool(NewDeleteRecordTool())
+
+	// 数据查询工具
+	// TODO: 以下工具需要实现服务注入
+	s.RegisterTool(NewQueryRecordsTool())
+	s.RegisterTool(NewSearchRecordsTool())
+}
+
+// NewBaseToolService 创建基础工具服务（向后兼容）
 func NewBaseToolService() *BaseToolService {
 	service := &BaseToolService{
 		tools: make(map[string]Tool),
 	}
 
-	// 注册默认工具
+	// 注册默认工具（占位符实现）
 	service.registerDefaultTools()
 
 	return service
 }
 
-// registerDefaultTools 注册默认工具
+// registerDefaultTools 注册默认工具（占位符实现）
+// 注意：这些工具没有服务依赖，只提供占位符实现
 func (s *BaseToolService) registerDefaultTools() {
 	// 数据查询工具
 	s.RegisterTool(NewQueryRecordsTool())
 	s.RegisterTool(NewSearchRecordsTool())
 
-	// 数据操作工具
-	s.RegisterTool(NewCreateRecordTool())
+	// 数据操作工具（占位符实现，没有服务依赖）
 	s.RegisterTool(NewUpdateRecordTool())
 	s.RegisterTool(NewDeleteRecordTool())
 
-	// 结构管理工具
-	s.RegisterTool(NewGetTableSchemaTool())
-	s.RegisterTool(NewListTablesTool())
+	// 结构管理工具（占位符实现，没有服务依赖）
+	// 注意：CreateRecordTool、GetTableSchemaTool、ListTablesTool 需要服务依赖，不能在这里注册
 }
 
 // RegisterTool 注册工具
@@ -159,4 +197,3 @@ func validateOptionalBool(arguments map[string]interface{}, key string) (bool, e
 
 	return boolVal, nil
 }
-

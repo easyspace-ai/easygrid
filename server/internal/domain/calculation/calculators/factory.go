@@ -45,4 +45,3 @@ func (f *CalculatorFactory) GetCalculator(field *entity.Field) Calculator {
 func (f *CalculatorFactory) CanCalculate(field *entity.Field) bool {
 	return f.GetCalculator(field) != nil
 }
-

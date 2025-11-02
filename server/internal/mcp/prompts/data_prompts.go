@@ -330,4 +330,3 @@ func (p *AnalyzeSchemaPrompt) Generate(ctx context.Context, arguments map[string
 		},
 	}, nil
 }
-

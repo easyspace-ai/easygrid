@@ -11,12 +11,12 @@ import (
 
 // Account 第三方账户实体
 type Account struct {
-	id         string
-	userID     valueobject.UserID
+	id          string
+	userID      valueobject.UserID
 	accountType string
-	provider   string
-	providerID string
-	createdAt  time.Time
+	provider    string
+	providerID  string
+	createdAt   time.Time
 }
 
 // NewAccount 创建第三方账户
@@ -30,7 +30,7 @@ func NewAccount(
 	if err := validateProvider(provider); err != nil {
 		return nil, err
 	}
-	
+
 	if providerID == "" {
 		return nil, user.NewDomainError(
 			"EMPTY_PROVIDER_ID",
@@ -38,7 +38,7 @@ func NewAccount(
 			nil,
 		)
 	}
-	
+
 	return &Account{
 		id:          uuid.New().String(),
 		userID:      userID,
@@ -51,12 +51,12 @@ func NewAccount(
 
 // ==================== 访问器方法 ====================
 
-func (a *Account) ID() string                  { return a.id }
-func (a *Account) UserID() valueobject.UserID  { return a.userID }
-func (a *Account) AccountType() string         { return a.accountType }
-func (a *Account) Provider() string            { return a.provider }
-func (a *Account) ProviderID() string          { return a.providerID }
-func (a *Account) CreatedAt() time.Time        { return a.createdAt }
+func (a *Account) ID() string                 { return a.id }
+func (a *Account) UserID() valueobject.UserID { return a.userID }
+func (a *Account) AccountType() string        { return a.accountType }
+func (a *Account) Provider() string           { return a.provider }
+func (a *Account) ProviderID() string         { return a.providerID }
+func (a *Account) CreatedAt() time.Time       { return a.createdAt }
 
 // IsOAuth 是否为OAuth账户
 func (a *Account) IsOAuth() bool {
@@ -76,11 +76,10 @@ func validateProvider(provider string) error {
 		"google": true,
 		"oidc":   true,
 	}
-	
+
 	if !validProviders[provider] {
 		return user.ErrInvalidProvider
 	}
-	
+
 	return nil
 }
-

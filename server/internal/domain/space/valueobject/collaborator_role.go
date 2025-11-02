@@ -8,11 +8,11 @@ type CollaboratorRole struct {
 }
 
 const (
-	RoleOwner   = "owner"
-	RoleAdmin   = "admin"
-	RoleEditor  = "editor"
-	RoleViewer  = "viewer"
-	RoleGuest   = "guest"
+	RoleOwner  = "owner"
+	RoleAdmin  = "admin"
+	RoleEditor = "editor"
+	RoleViewer = "viewer"
+	RoleGuest  = "guest"
 )
 
 // NewCollaboratorRole 创建协作者角色
@@ -20,7 +20,7 @@ func NewCollaboratorRole(value string) (CollaboratorRole, error) {
 	if !isValidRole(value) {
 		return CollaboratorRole{}, space.ErrInvalidRole
 	}
-	
+
 	return CollaboratorRole{value: value}, nil
 }
 
@@ -121,7 +121,6 @@ func isValidRole(value string) bool {
 		RoleViewer: true,
 		RoleGuest:  true,
 	}
-	
+
 	return validRoles[value]
 }
-

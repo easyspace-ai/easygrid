@@ -7,8 +7,11 @@ import (
 	baseRepo "github.com/easyspace-ai/luckdb/server/internal/domain/base/repository"
 	"github.com/easyspace-ai/luckdb/server/internal/domain/collaborator/entity"
 	"github.com/easyspace-ai/luckdb/server/internal/domain/collaborator/repository"
+	fieldRepo "github.com/easyspace-ai/luckdb/server/internal/domain/fields/repository"
+	"github.com/easyspace-ai/luckdb/server/internal/domain/fields/valueobject"
 	spaceRepo "github.com/easyspace-ai/luckdb/server/internal/domain/space/repository"
 	tableRepo "github.com/easyspace-ai/luckdb/server/internal/domain/table/repository"
+	viewRepo "github.com/easyspace-ai/luckdb/server/internal/domain/view/repository"
 	"github.com/easyspace-ai/luckdb/server/pkg/logger"
 
 	"go.uber.org/zap"
@@ -24,6 +27,8 @@ type PermissionServiceV2 struct {
 	spaceRepo        spaceRepo.SpaceRepository
 	baseRepo         baseRepo.BaseRepository
 	tableRepo        tableRepo.TableRepository
+	fieldRepo        fieldRepo.FieldRepository
+	viewRepo         viewRepo.ViewRepository
 }
 
 // NewPermissionServiceV2 创建权限服务v2
@@ -32,12 +37,16 @@ func NewPermissionServiceV2(
 	spaceRepo spaceRepo.SpaceRepository,
 	baseRepo baseRepo.BaseRepository,
 	tableRepo tableRepo.TableRepository,
+	fieldRepo fieldRepo.FieldRepository,
+	viewRepo viewRepo.ViewRepository,
 ) *PermissionServiceV2 {
 	return &PermissionServiceV2{
 		collaboratorRepo: collaboratorRepo,
 		spaceRepo:        spaceRepo,
 		baseRepo:         baseRepo,
 		tableRepo:        tableRepo,
+		fieldRepo:        fieldRepo,
+		viewRepo:         viewRepo,
 	}
 }
 
@@ -217,6 +226,158 @@ func (s *PermissionServiceV2) FilterAccessibleRecords(ctx context.Context, userI
 		return recordIDs
 	}
 	return []string{}
+}
+
+// ==================== Field权限 ====================
+
+// CanReadField 检查用户是否可以读取Field
+// Field继承Table的权限
+func (s *PermissionServiceV2) CanReadField(ctx context.Context, userID, fieldID string) bool {
+	// 1. 获取Field所属的Table
+	field, err := s.fieldRepo.FindByID(ctx, valueobject.NewFieldID(fieldID))
+	if err != nil || field == nil {
+		logger.Debug("Field not found",
+			zap.String("user_id", userID),
+			zap.String("field_id", fieldID),
+			zap.Error(err),
+		)
+		return false
+	}
+
+	// 2. 检查Table权限（Field继承Table的读权限）
+	return s.CanAccessTable(ctx, userID, field.TableID())
+}
+
+// CanUpdateField 检查用户是否可以更新Field
+// Field继承Table的字段管理权限
+func (s *PermissionServiceV2) CanUpdateField(ctx context.Context, userID, fieldID string) bool {
+	// 1. 获取Field所属的Table
+	field, err := s.fieldRepo.FindByID(ctx, valueobject.NewFieldID(fieldID))
+	if err != nil || field == nil {
+		logger.Debug("Field not found",
+			zap.String("user_id", userID),
+			zap.String("field_id", fieldID),
+			zap.Error(err),
+		)
+		return false
+	}
+
+	// 2. 检查Table的字段更新权限
+	table, err := s.tableRepo.GetByID(ctx, field.TableID())
+	if err != nil {
+		return false
+	}
+
+	return s.Can(ctx, userID, table.BaseID(), entity.ResourceTypeBase, permission.ActionTableFieldUpdate)
+}
+
+// CanDeleteField 检查用户是否可以删除Field
+// Field继承Table的字段管理权限
+func (s *PermissionServiceV2) CanDeleteField(ctx context.Context, userID, fieldID string) bool {
+	// 1. 获取Field所属的Table
+	field, err := s.fieldRepo.FindByID(ctx, valueobject.NewFieldID(fieldID))
+	if err != nil || field == nil {
+		logger.Debug("Field not found",
+			zap.String("user_id", userID),
+			zap.String("field_id", fieldID),
+			zap.Error(err),
+		)
+		return false
+	}
+
+	// 2. 检查Table的字段删除权限
+	table, err := s.tableRepo.GetByID(ctx, field.TableID())
+	if err != nil {
+		return false
+	}
+
+	return s.Can(ctx, userID, table.BaseID(), entity.ResourceTypeBase, permission.ActionTableFieldDelete)
+}
+
+// CanCreateField 检查用户是否可以在Table中创建Field
+func (s *PermissionServiceV2) CanCreateField(ctx context.Context, userID, tableID string) bool {
+	table, err := s.tableRepo.GetByID(ctx, tableID)
+	if err != nil {
+		return false
+	}
+
+	return s.Can(ctx, userID, table.BaseID(), entity.ResourceTypeBase, permission.ActionTableFieldCreate)
+}
+
+// ==================== View权限 ====================
+
+// CanReadView 检查用户是否可以读取View
+// View继承Table的权限
+func (s *PermissionServiceV2) CanReadView(ctx context.Context, userID, viewID string) bool {
+	// 1. 获取View所属的Table
+	view, err := s.viewRepo.FindByID(ctx, viewID)
+	if err != nil || view == nil {
+		logger.Debug("View not found",
+			zap.String("user_id", userID),
+			zap.String("view_id", viewID),
+			zap.Error(err),
+		)
+		return false
+	}
+
+	// 2. 检查Table权限（View继承Table的读权限）
+	return s.CanAccessTable(ctx, userID, view.TableID())
+}
+
+// CanUpdateView 检查用户是否可以更新View
+// View继承Table的视图管理权限
+func (s *PermissionServiceV2) CanUpdateView(ctx context.Context, userID, viewID string) bool {
+	// 1. 获取View所属的Table
+	view, err := s.viewRepo.FindByID(ctx, viewID)
+	if err != nil || view == nil {
+		logger.Debug("View not found",
+			zap.String("user_id", userID),
+			zap.String("view_id", viewID),
+			zap.Error(err),
+		)
+		return false
+	}
+
+	// 2. 检查Table的视图更新权限
+	table, err := s.tableRepo.GetByID(ctx, view.TableID())
+	if err != nil {
+		return false
+	}
+
+	return s.Can(ctx, userID, table.BaseID(), entity.ResourceTypeBase, permission.ActionTableViewUpdate)
+}
+
+// CanDeleteView 检查用户是否可以删除View
+// View继承Table的视图管理权限
+func (s *PermissionServiceV2) CanDeleteView(ctx context.Context, userID, viewID string) bool {
+	// 1. 获取View所属的Table
+	view, err := s.viewRepo.FindByID(ctx, viewID)
+	if err != nil || view == nil {
+		logger.Debug("View not found",
+			zap.String("user_id", userID),
+			zap.String("view_id", viewID),
+			zap.Error(err),
+		)
+		return false
+	}
+
+	// 2. 检查Table的视图删除权限
+	table, err := s.tableRepo.GetByID(ctx, view.TableID())
+	if err != nil {
+		return false
+	}
+
+	return s.Can(ctx, userID, table.BaseID(), entity.ResourceTypeBase, permission.ActionTableViewDelete)
+}
+
+// CanCreateView 检查用户是否可以在Table中创建View
+func (s *PermissionServiceV2) CanCreateView(ctx context.Context, userID, tableID string) bool {
+	table, err := s.tableRepo.GetByID(ctx, tableID)
+	if err != nil {
+		return false
+	}
+
+	return s.Can(ctx, userID, table.BaseID(), entity.ResourceTypeBase, permission.ActionTableViewCreate)
 }
 
 // ==================== 辅助方法 ====================

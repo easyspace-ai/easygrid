@@ -103,4 +103,3 @@ func ValidateStringLength(s string, minLen, maxLen int) bool {
 	length := len(s)
 	return length >= minLen && length <= maxLen
 }
-

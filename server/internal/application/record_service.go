@@ -18,6 +18,7 @@ import (
 	"github.com/easyspace-ai/luckdb/server/pkg/logger"
 	"github.com/easyspace-ai/luckdb/server/pkg/sharedb/opbuilder"
 	"go.uber.org/zap"
+	"gorm.io/gorm"
 )
 
 // RecordService 记录应用服务（集成计算引擎+实时推送）✨
@@ -91,6 +92,24 @@ func (s *RecordService) SetHookService(hookService *HookService) {
 	s.hookService = hookService
 }
 
+// getDBFromRecordRepo 从 RecordRepository 获取数据库连接
+// 处理缓存包装器的情况
+func (s *RecordService) getDBFromRecordRepo() (*gorm.DB, error) {
+	// 尝试类型断言到 CachedRecordRepository
+	if cachedRepo, ok := s.recordRepo.(*infraRepository.CachedRecordRepository); ok {
+		db := cachedRepo.GetDB()
+		if db == nil {
+			return nil, fmt.Errorf("无法从缓存仓库获取数据库连接")
+		}
+		return db, nil
+	}
+	// 尝试类型断言到 RecordRepositoryDynamic
+	if dynamicRepo, ok := s.recordRepo.(*infraRepository.RecordRepositoryDynamic); ok {
+		return dynamicRepo.GetDB(), nil
+	}
+	return nil, fmt.Errorf("不支持的 RecordRepository 类型")
+}
+
 // CreateRecord 创建记录（集成自动计算）✨ 事务版
 //
 // 执行流程：
@@ -121,7 +140,13 @@ func (s *RecordService) CreateRecord(ctx context.Context, req dto.CreateRecordRe
 	var finalFields map[string]interface{}
 
 	// ✅ 在事务中执行所有操作
-	err = database.Transaction(ctx, s.recordRepo.(*infraRepository.RecordRepositoryDynamic).GetDB(), nil, func(txCtx context.Context) error {
+	// 处理缓存包装器的情况
+	db, err := s.getDBFromRecordRepo()
+	if err != nil {
+		return nil, pkgerrors.ErrInternalServer.WithDetails(fmt.Sprintf("获取数据库连接失败: %v", err))
+	}
+
+	err = database.Transaction(ctx, db, nil, func(txCtx context.Context) error {
 		// 1. 数据验证和类型转换
 		var validatedData map[string]interface{}
 		if s.typecastService != nil {
@@ -193,6 +218,10 @@ func (s *RecordService) CreateRecord(ctx context.Context, req dto.CreateRecordRe
 	})
 
 	if err != nil {
+		logger.Error("记录创建失败",
+			logger.String("table_id", req.TableID),
+			logger.Any("data", req.Data),
+			logger.ErrorField(err))
 		return nil, err
 	}
 
@@ -274,7 +303,13 @@ func (s *RecordService) UpdateRecord(ctx context.Context, tableID, recordID stri
 	var finalFields map[string]interface{}
 
 	// ✅ 在事务中执行所有操作
-	err = database.Transaction(ctx, s.recordRepo.(*infraRepository.RecordRepositoryDynamic).GetDB(), nil, func(txCtx context.Context) error {
+	// 处理缓存包装器的情况
+	db, err := s.getDBFromRecordRepo()
+	if err != nil {
+		return nil, pkgerrors.ErrInternalServer.WithDetails(fmt.Sprintf("获取数据库连接失败: %v", err))
+	}
+
+	err = database.Transaction(ctx, db, nil, func(txCtx context.Context) error {
 		// 1. 查找记录（使用 tableID）
 		id := valueobject.NewRecordID(recordID)
 		var err error
@@ -515,25 +550,35 @@ func (s *RecordService) ListRecords(ctx context.Context, tableID string, limit, 
 		return nil, 0, pkgerrors.ErrDatabaseOperation.WithDetails(fmt.Sprintf("查询记录列表失败: %v", err))
 	}
 
-	// ✅ 关键修复：计算虚拟字段（参考 teable 设计）
-	// 虚拟字段需要在返回给前端之前计算，确保显示正确的值
+	// ✅ 优化：批量预加载字段，避免N+1查询
+	// 一次性获取所有字段，然后在计算时复用
 	if s.calculationService != nil && len(records) > 0 {
 		logger.Info("开始计算记录列表的虚拟字段",
 			logger.String("table_id", tableID),
 			logger.Int("record_count", len(records)))
 
-		for _, record := range records {
-			if err := s.calculationService.CalculateRecordFields(ctx, record); err != nil {
-				logger.Warn("计算记录虚拟字段失败",
-					logger.String("record_id", record.ID().String()),
-					logger.ErrorField(err))
-				// 不中断整个列表，继续处理其他记录
+		// 预加载字段（只查询一次）
+		fields, err := s.fieldRepo.FindByTableID(ctx, tableID)
+		if err != nil {
+			logger.Warn("预加载字段失败，跳过虚拟字段计算",
+				logger.String("table_id", tableID),
+				logger.ErrorField(err))
+		} else {
+			// 批量计算所有记录的虚拟字段（使用预加载的字段）
+			for _, record := range records {
+				if err := s.calculationService.CalculateRecordFieldsWithFields(ctx, record, fields); err != nil {
+					logger.Warn("计算记录虚拟字段失败",
+						logger.String("record_id", record.ID().String()),
+						logger.ErrorField(err))
+					// 不中断整个列表，继续处理其他记录
+				}
 			}
-		}
 
-		logger.Info("记录列表虚拟字段计算完成",
-			logger.String("table_id", tableID),
-			logger.Int("record_count", len(records)))
+			logger.Info("记录列表虚拟字段计算完成",
+				logger.String("table_id", tableID),
+				logger.Int("record_count", len(records)),
+				logger.Int("fields_count", len(fields)))
+		}
 	}
 
 	// 转换为 DTO
@@ -732,14 +777,14 @@ func (s *RecordService) publishRecordEvent(event *database.RecordEvent) {
 				logger.String("event_type", event.EventType))
 		}
 	}
-	
+
 	// 2. 发布到ShareDB（实时协作）
 	if s.shareDBService != nil && event.EventType == "record.update" {
 		// 创建ShareDB操作
 		op := sharedb.OTOperation{
 			"p": []interface{}{"data", event.Fields}, // 设置路径操作
 		}
-		
+
 		// 广播ShareDB操作
 		err := s.shareDBService.BroadcastOperation(event.TID, event.RID, []sharedb.OTOperation{op})
 		if err != nil {
@@ -777,7 +822,7 @@ func (s *RecordService) publishRecordEvent(event *database.RecordEvent) {
 			NewValue: nil,
 			Type:     opbuilder.OpTypeSet,
 		}
-		
+
 		// 发布到 ShareDB
 		err := s.shareDBService.PublishOp(ctx, collection, docID, opBuilderOp)
 		if err != nil {

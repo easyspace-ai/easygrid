@@ -18,5 +18,3 @@ type PinResource struct {
 func (PinResource) TableName() string {
 	return "pin_resource"
 }
-
-

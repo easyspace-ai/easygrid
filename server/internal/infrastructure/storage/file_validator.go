@@ -47,8 +47,14 @@ func (v *FileValidator) ValidateFile(ctx context.Context, filename string, size 
 		return errors.ErrBadRequest.WithDetails("Filename is required")
 	}
 
-	// 检查文件名是否包含危险字符
-	if strings.ContainsAny(filename, "../\\") {
+	// 检查文件名是否包含路径遍历字符（../ 或 ..\）
+	// 注意：不要使用 ContainsAny，因为它会匹配单个字符（如 .），导致正常的文件名被拒绝
+	if strings.Contains(filename, "../") || strings.Contains(filename, "..\\") {
+		return errors.ErrBadRequest.WithDetails("Filename contains invalid characters")
+	}
+
+	// 检查文件名是否包含反斜杠（Windows路径分隔符）
+	if strings.Contains(filename, "\\") {
 		return errors.ErrBadRequest.WithDetails("Filename contains invalid characters")
 	}
 
@@ -123,14 +129,18 @@ func (v *FileValidator) IsDocument(mimeType string) bool {
 
 // isAllowedType 检查文件类型是否被允许
 func (v *FileValidator) isAllowedType(contentType string, allowedTypes []string) bool {
+	// 提取 MIME 类型的主部分（去掉参数，如 charset=utf-8）
+	baseType := strings.TrimSpace(strings.Split(contentType, ";")[0])
+	
 	for _, allowedType := range allowedTypes {
-		if contentType == allowedType {
+		// 精确匹配
+		if contentType == allowedType || baseType == allowedType {
 			return true
 		}
 		// 支持通配符匹配，如 "image/*"
 		if strings.HasSuffix(allowedType, "/*") {
 			prefix := strings.TrimSuffix(allowedType, "/*")
-			if strings.HasPrefix(contentType, prefix+"/") {
+			if strings.HasPrefix(contentType, prefix+"/") || strings.HasPrefix(baseType, prefix+"/") {
 				return true
 			}
 		}

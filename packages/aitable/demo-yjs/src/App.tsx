@@ -1,123 +1,97 @@
-import React, { useState, useEffect } from 'react';
-import { LoginForm } from './components/LoginForm';
-import { TableViewV3 } from './components/TableViewV3';
-import { useConnection } from './hooks/useConnection';
+/**
+ * App 组件 - 主应用组件
+ * 整合登录、表格视图、工具栏等组件
+ */
+
+import React from 'react'
+import { LogOut, User } from 'lucide-react'
+import { useAuth } from './hooks/useAuth'
+import { LoginForm } from './components/LoginForm'
+import { TableDemo } from './components/TableDemo'
+import { config } from './config'
 
 export default function App() {
-  const { sdk, isLoggedIn, user, login, logout, getShareDBConnectionState } = useConnection();
-  const [showLogin, setShowLogin] = useState(!isLoggedIn);
-  
-  // 版本检查 - 确保代码更新（只在组件挂载时打印一次）
-  useEffect(() => {
-    console.log('🚀 App 启动 (v2.1) - 修复事件监听问题');
-  }, []);
-  
-  // 降低连接状态刷新频率（从1秒改为5秒）
-  const [connectionRefreshTrigger, setConnectionRefreshTrigger] = useState(0);
-  
-  useEffect(() => {
-    const interval = setInterval(() => {
-      setConnectionRefreshTrigger(prev => prev + 1);
-    }, 5000); // 每5秒刷新一次连接状态，降低频率
-    
-    return () => clearInterval(interval);
-  }, []);
-  
-  // 获取 ShareDB 连接状态（移除不必要的日志）
-  const shareDBState = getShareDBConnectionState();
-  const isShareDBConnected = shareDBState === 'connected';
+  const { isLoggedIn, isLoading, user, login, logout, error, clearError, sdk } = useAuth()
 
-  // 同步登录状态
-  useEffect(() => {
-    console.log('🔄 同步登录状态:', { isLoggedIn, showLogin });
-    setShowLogin(!isLoggedIn);
-  }, [isLoggedIn]);
-
-  // ShareDB 连接状态调试（减少日志频率）
-  useEffect(() => {
-    // 只在状态真正变化时或每5次刷新时打印日志
-    if (connectionRefreshTrigger % 5 === 0 || connectionRefreshTrigger === 1) {
-      console.log('📊 ShareDB 连接状态 (v2.1):', {
-        shareDBState,
-        isShareDBConnected,
-        accessToken: !!sdk?.config.accessToken,
-        sdkConnectionState: sdk?.getShareDBConnectionState?.(),
-        refreshTrigger: connectionRefreshTrigger,
-      });
+  // 处理登录
+  const handleLogin = async (email: string, password: string): Promise<boolean> => {
+    const success = await login(email, password)
+    if (success) {
+      clearError()
     }
-  }, [shareDBState, isShareDBConnected, sdk?.config.accessToken, sdk, connectionRefreshTrigger]);
+    return success
+  }
 
-  const handleLogin = async (email: string, password: string) => {
-    try {
-      await login(email, password);
-      setShowLogin(false);
-      return true;
-    } catch (error) {
-      console.error('登录失败:', error);
-      return false;
-    }
-  };
-
+  // 处理登出
   const handleLogout = () => {
-    logout();
-    setShowLogin(true);
-  };
+    logout()
+  }
 
-  console.log('🎯 App 渲染状态:', { showLogin, isLoggedIn, user: user?.name });
-
-  if (showLogin || !isLoggedIn) {
-    console.log('📝 显示登录页面');
+  // 显示登录页面
+  if (!isLoggedIn) {
     return (
       <LoginForm 
         onLogin={handleLogin}
-        isConnecting={false}
-        error={null}
-        isConnected={isLoggedIn}
+        isLoading={isLoading}
+        error={error}
       />
-    );
+    )
   }
 
-  console.log('🏠 显示主界面');
+  // 显示主应用
   return (
-    <div className="h-screen w-full flex flex-col">
+    <div className="h-screen w-full flex flex-col bg-gray-50">
       {/* 顶部导航栏 */}
-      <div className="h-12 bg-white border-b border-gray-200 flex items-center justify-between px-4">
+      <header className="h-12 bg-white border-b border-gray-200 flex items-center justify-between px-4 shadow-sm">
         <div className="flex items-center space-x-3">
-          <h1 className="text-lg font-semibold text-gray-900">EasyGrid Demo - 实时协作表格</h1>
-          <span className="text-sm text-gray-500">v3.0</span>
-          {/* ShareDB 连接状态指示器 */}
-          <div className="flex items-center space-x-2">
-            <div className={`w-2 h-2 rounded-full ${
-              isShareDBConnected ? 'bg-green-500' : 'bg-red-500'
-            }`} />
-            <span className="text-xs text-gray-500">
-              {isShareDBConnected ? '实时连接' : '离线'}
-            </span>
-            <span className="text-xs text-gray-400">
-              ({shareDBState})
-            </span>
+          <div className="w-8 h-8 bg-blue-600 rounded-lg flex items-center justify-center">
+            <span className="text-white font-bold text-sm">EG</span>
+          </div>
+          <div>
+            <h1 className="text-lg font-semibold text-gray-900">EasyGrid Demo</h1>
+            <p className="text-xs text-gray-500">实时协作表格演示</p>
           </div>
         </div>
-        <div className="flex items-center space-x-3">
-          <span className="text-sm text-gray-600">
-            欢迎, {user?.name} ({user?.email})
-          </span>
+
+        <div className="flex items-center space-x-4">
+          {/* 用户信息 */}
+          <div className="flex items-center space-x-2 text-sm text-gray-600">
+            <User className="h-4 w-4" />
+            <span>{user?.name}</span>
+            <span className="text-gray-400">({user?.email})</span>
+          </div>
+
+          {/* 登出按钮 */}
           <button
             onClick={handleLogout}
-            className="px-3 py-1 text-sm text-gray-600 hover:text-gray-900 hover:bg-gray-100 rounded"
+            className="flex items-center space-x-1 px-3 py-1 text-sm text-gray-600 hover:text-gray-900 hover:bg-gray-100 rounded transition-colors"
           >
-            退出登录
+            <LogOut className="h-4 w-4" />
+            <span>登出</span>
           </button>
         </div>
-      </div>
+      </header>
 
       {/* 主要内容区域 */}
-      <div className="flex-1 min-h-0">
-        <TableViewV3 
+      <main className="flex-1 min-h-0">
+        {sdk && (
+          <TableDemo
           sdk={sdk}
-          isShareDBConnected={isShareDBConnected}
-        />
+            tableId={config.testTable.tableId}
+          />
+        )}
+      </main>
+
+      {/* 底部状态栏 */}
+      <footer className="h-8 bg-gray-100 border-t border-gray-200 flex items-center justify-between px-4 text-xs text-gray-500">
+        <div className="flex items-center space-x-4">
+          <span>API: {config.baseURL}</span>
+          <span>表格: {config.testTable.tableId}</span>
+        </div>
+        <div>
+          <span>EasyGrid Demo v2.0.0</span>
       </div>
+      </footer>
     </div>
-  );
+  )
 }

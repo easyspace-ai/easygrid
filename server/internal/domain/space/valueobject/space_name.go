@@ -2,7 +2,7 @@ package valueobject
 
 import (
 	"strings"
-	
+
 	"github.com/easyspace-ai/luckdb/server/internal/domain/space"
 	"github.com/easyspace-ai/luckdb/server/pkg/utils"
 )
@@ -21,12 +21,12 @@ type SpaceName struct {
 func NewSpaceName(value string) (SpaceName, error) {
 	// 去除首尾空格
 	trimmed := strings.TrimSpace(value)
-	
+
 	// 验证
 	if err := validateSpaceName(trimmed); err != nil {
 		return SpaceName{}, err
 	}
-	
+
 	return SpaceName{value: trimmed}, nil
 }
 
@@ -61,17 +61,16 @@ func validateSpaceName(name string) error {
 	if name == "" {
 		return space.ErrSpaceNameEmpty
 	}
-	
+
 	// 检查长度
 	if len(name) > MaxSpaceNameLength {
 		return space.ErrSpaceNameTooLong
 	}
-	
+
 	// 检查 SQL 注入
 	if utils.ContainsSQLInjection(name) {
 		return space.ErrSpaceNameInvalid
 	}
-	
+
 	return nil
 }
-

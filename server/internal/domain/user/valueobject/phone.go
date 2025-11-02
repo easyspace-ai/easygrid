@@ -14,21 +14,21 @@ type Phone struct {
 
 // 支持多种手机号格式
 var phoneRegexes = []*regexp.Regexp{
-	regexp.MustCompile(`^1[3-9]\d{9}$`),                    // 中国大陆
-	regexp.MustCompile(`^\+\d{1,3}\d{6,14}$`),             // 国际格式
-	regexp.MustCompile(`^(\d{3}-)?\d{3,4}-\d{4}$`),        // 带连字符
+	regexp.MustCompile(`^1[3-9]\d{9}$`),            // 中国大陆
+	regexp.MustCompile(`^\+\d{1,3}\d{6,14}$`),      // 国际格式
+	regexp.MustCompile(`^(\d{3}-)?\d{3,4}-\d{4}$`), // 带连字符
 }
 
 // NewPhone 创建手机号值对象
 func NewPhone(value string) (Phone, error) {
 	// 去除空格和特殊字符
 	normalized := normalizePhone(value)
-	
+
 	// 验证
 	if err := validatePhone(normalized); err != nil {
 		return Phone{}, err
 	}
-	
+
 	return Phone{value: normalized}, nil
 }
 
@@ -52,7 +52,7 @@ func (p Phone) Masked() string {
 	if len(p.value) < 7 {
 		return "***"
 	}
-	
+
 	// 保留前3位和后4位
 	return p.value[:3] + "****" + p.value[len(p.value)-4:]
 }
@@ -66,7 +66,7 @@ func normalizePhone(phone string) string {
 	// 去除括号
 	phone = strings.ReplaceAll(phone, "(", "")
 	phone = strings.ReplaceAll(phone, ")", "")
-	
+
 	return phone
 }
 
@@ -76,18 +76,17 @@ func validatePhone(phone string) error {
 		// 手机号是可选的，空值是允许的
 		return nil
 	}
-	
+
 	if len(phone) > 20 {
 		return user.ErrPhoneTooLong
 	}
-	
+
 	// 尝试匹配任一格式
 	for _, regex := range phoneRegexes {
 		if regex.MatchString(phone) {
 			return nil
 		}
 	}
-	
+
 	return user.ErrPhoneInvalid
 }
-
