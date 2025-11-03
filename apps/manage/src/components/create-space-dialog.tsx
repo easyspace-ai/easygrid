@@ -41,7 +41,7 @@ export function CreateSpaceDialog({ onSpaceCreated }: CreateSpaceDialogProps) {
       const newSpace = await luckdb.spaces.create({
         name: name.trim(),
         description: description.trim() || undefined,
-      })
+      } as any)
 
       toast.success("创建空间成功")
       setOpen(false)

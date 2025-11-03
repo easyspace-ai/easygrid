@@ -42,13 +42,13 @@ export function TableEditorLayout({ children }: TableEditorLayoutProps) {
 
     try {
       setLoading(true);
-      const [baseData, tablesData] = await Promise.all([
+      const [baseData, tablesRes] = await Promise.all([
         luckdb.bases.getOne(baseId),
-        luckdb.tables.getList({ baseId }),
+        luckdb.tables.getList(baseId, 1, 200),
       ]);
 
-      setBase(baseData);
-      setTables(tablesData);
+      setBase(baseData as any);
+      setTables((Array.isArray(tablesRes) ? tablesRes : tablesRes.items) as any);
     } catch (error) {
       console.error('Failed to load sidebar data:', error);
     } finally {
@@ -58,8 +58,8 @@ export function TableEditorLayout({ children }: TableEditorLayoutProps) {
 
   const loadViews = async (tableId: string) => {
     try {
-      const viewsData = await luckdb.views.getList(tableId);
-      setViews(viewsData);
+      const res = await luckdb.views.getList(tableId, 1, 200);
+      setViews((Array.isArray(res) ? res : res.items) as any);
     } catch (error) {
       console.error('Failed to load views:', error);
       setViews([]);
@@ -75,9 +75,10 @@ export function TableEditorLayout({ children }: TableEditorLayoutProps) {
 
     // ✅ 如果没有 defaultViewId，回退到查询第一个视图（兼容旧数据）
     try {
-      const viewsData = await luckdb.views.getList(table.id);
-      if (viewsData.length > 0) {
-        const firstView = viewsData[0];
+      const res = await luckdb.views.getList(table.id, 1, 200);
+      const list = (Array.isArray(res) ? res : res.items) as any[];
+      if (list.length > 0) {
+        const firstView = list[0];
         navigate(`/base/${baseId}/${table.id}/${firstView.id}`);
       } else {
         toast.error('该表格没有可用的视图');
@@ -92,12 +93,9 @@ export function TableEditorLayout({ children }: TableEditorLayoutProps) {
     if (!baseId) return;
 
     try {
-      const newTable = await luckdb.tables.create(baseId, {
-        name,
-        description,
-      });
+      const newTable = await luckdb.tables.create(baseId, { name, description });
 
-      setTables(prev => [...prev, newTable]);
+      setTables(prev => [...prev, newTable as any]);
       
       // ✅ 自动跳转到新创建的表格的默认视图
       if (newTable.defaultViewId) {

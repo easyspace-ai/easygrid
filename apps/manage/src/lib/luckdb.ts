@@ -1,15 +1,8 @@
-import LuckDBClient, { LocalAuthStore } from '@easygrid/sdk';
+import LuckDB, { LocalAuthStore } from '@easygrid/sdk';
 
-// 从环境变量获取服务器地址，默认使用 localhost:8080
-const SERVER_URL = import.meta.env.VITE_API_URL || import.meta.env.VITE_LUCKDB_SERVER_URL || 'http://localhost:8080';
-
-// 创建认证存储实例
-const authStore = new LocalAuthStore();
-
-// 创建全局 SDK 客户端实例
-export const luckdb = new LuckDBClient(SERVER_URL, authStore, 'zh-CN');
-
-// 导出客户端类型
-export type { LuckDBClient };
+// 创建 SDK 实例（新版 SDK 构造函数签名为 (baseURL: string, authStore?, lang?)）
+const baseURL = (import.meta as any).env?.VITE_API_URL || 'http://localhost:8080';
+export const authStore = new LocalAuthStore();
+export const luckdb = new LuckDB(baseURL, authStore, 'zh-CN');
 
 export default luckdb;

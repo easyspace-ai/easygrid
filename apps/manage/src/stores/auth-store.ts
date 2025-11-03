@@ -1,10 +1,10 @@
 import { create } from 'zustand';
 import { persist } from 'zustand/middleware';
-import type { User, AuthResponse, RegisterRequest } from '@easygrid/sdk';
-import luckdb from '@/lib/luckdb';
+import type { AuthRecord, AuthResponse } from '@easygrid/sdk';
+import luckdb, { authStore as luckdbAuthStore } from '@/lib/luckdb';
 
 interface AuthState {
-  user: User | null;
+  user: AuthRecord | null;
   accessToken: string | null;
   refreshToken: string | null;
   isAuthenticated: boolean;
@@ -27,20 +27,14 @@ export const useAuthStore = create<AuthState>()(
 
       login: async (email: string, password: string) => {
         try {
-          // 新 SDK 的 login 方法返回 AuthResponse { token, record }
-          // LocalAuthStore 会自动处理 token 持久化
-          const response = await luckdb.auth.login(email, password);
-          
-          // 从 response.record 获取用户信息，从 response.token 获取 token
-          // refreshToken 在新 SDK 中由 authStore 内部管理
-          const token = response.token || luckdb.authStore.token;
-          const user = response.record;
-          
+          const resp = await luckdb.auth.login(email, password);
+          // SDK 已在 authService 内部保存到 authStore，这里同步到 zustand
+          luckdbAuthStore.save(resp.token, resp.record);
           set({
-            user: user as User,
-            accessToken: token || null,
-            refreshToken: null, // 新 SDK 的 refreshToken 由 authStore 内部管理
-            isAuthenticated: !!token && !!user,
+            user: resp.record,
+            accessToken: resp.token,
+            refreshToken: null,
+            isAuthenticated: true,
           });
         } catch (error) {
           console.error('Login failed:', error);
@@ -48,24 +42,15 @@ export const useAuthStore = create<AuthState>()(
         }
       },
 
-      register: async (userData: RegisterRequest) => {
+      register: async (userData: { email: string; password: string; passwordConfirm: string; name?: string }) => {
         try {
-          // 新 SDK 的 register 方法需要单独传递参数
-          const response = await luckdb.auth.register(
-            userData.email,
-            userData.password,
-            userData.passwordConfirm,
-            userData.name
-          );
-          
-          const token = response.token || luckdb.authStore.token;
-          const user = response.record;
-          
+          const resp = await luckdb.auth.register(userData.email, userData.password, userData.passwordConfirm, userData.name);
+          luckdbAuthStore.save(resp.token, resp.record);
           set({
-            user: user as User,
-            accessToken: token || null,
-            refreshToken: null, // 新 SDK 的 refreshToken 由 authStore 内部管理
-            isAuthenticated: !!token && !!user,
+            user: resp.record,
+            accessToken: resp.token,
+            refreshToken: null,
+            isAuthenticated: true,
           });
         } catch (error) {
           console.error('Register failed:', error);
@@ -76,11 +61,10 @@ export const useAuthStore = create<AuthState>()(
       logout: async () => {
         try {
           await luckdb.auth.logout();
-          // LocalAuthStore 会自动清除 token
         } catch (error) {
           console.error('Logout failed:', error);
         } finally {
-          // 确保清除本地状态
+          luckdbAuthStore.clear();
           set({
             user: null,
             accessToken: null,
@@ -91,14 +75,11 @@ export const useAuthStore = create<AuthState>()(
       },
 
       setAuth: (auth: AuthResponse) => {
-        // 新 SDK 的 AuthResponse 格式是 { token, record }
-        const user = auth.record;
-        const token = auth.token;
         set({
-          user: user as User,
-          accessToken: token || null,
-          refreshToken: null, // 新 SDK 的 refreshToken 由 authStore 内部管理
-          isAuthenticated: !!token && !!user,
+          user: auth.record,
+          accessToken: auth.token,
+          refreshToken: null,
+          isAuthenticated: true,
         });
       },
 

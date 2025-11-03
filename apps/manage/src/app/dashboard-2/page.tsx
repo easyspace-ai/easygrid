@@ -63,12 +63,13 @@ export default function Dashboard() {
   const loadSpaces = async () => {
     try {
       setLoading(true);
-      const spacesData = await luckdb.spaces.getList();
-      setSpaces(spacesData);
+      const spacesRes = await luckdb.spaces.getList(1, 200, {} as any);
+      const spacesList = Array.isArray(spacesRes) ? spacesRes : spacesRes.items;
+      setSpaces(spacesList as any);
       
       // 如果没有选中空间，自动选择第一个
-      if (spacesData.length > 0 && !selectedSpace) {
-        setSelectedSpace(spacesData[0]);
+      if ((spacesList as any[]).length > 0 && !selectedSpace) {
+        setSelectedSpace((spacesList as any[])[0]);
       }
     } catch (error: any) {
       console.error('Failed to load spaces:', error);
@@ -80,8 +81,8 @@ export default function Dashboard() {
 
   const loadBases = async (spaceId: string) => {
     try {
-      const basesData = await luckdb.bases.getList({ spaceId });
-      setBases(basesData);
+      const basesRes = await luckdb.bases.getList(spaceId, 1, 200);
+      setBases((Array.isArray(basesRes) ? basesRes : basesRes.items) as any);
     } catch (error: any) {
       console.error('Failed to load bases:', error);
       toast.error('加载数据库失败');
@@ -97,8 +98,7 @@ export default function Dashboard() {
 
     try {
       setCreatingBase(true);
-      const newBase = await luckdb.bases.create({
-        spaceId: selectedSpace.id,
+      const newBase = await luckdb.bases.create(selectedSpace.id, {
         name: newBaseName.trim(),
         description: newBaseDescription.trim() || undefined,
       });

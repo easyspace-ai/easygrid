@@ -231,7 +231,7 @@ export function DatabaseSidebar({
                                 onClick={async (e) => {
                                   e.stopPropagation()
                                   try {
-                                    const usage = await luckdb.tables.getUsage(table.id)
+                                    const usage = await luckdb.tables.getTableUsage(table.id)
                                     const percent = (usage.usagePercentage || 0).toFixed(2)
                                     toast.info(`数据表用量：${percent}% (记录 ${usage.recordCount}/${usage.maxRecords})`)
                                   } catch (err: any) {
@@ -246,7 +246,7 @@ export function DatabaseSidebar({
                                 onClick={async (e) => {
                                   e.stopPropagation()
                                   try {
-                                    const duplicated = await luckdb.tables.duplicate(table.id, {
+                                    const duplicated = await luckdb.tables.duplicateTable(table.id, {
                                       name: `${table.name} (副本)`,
                                       withData: true,
                                       withViews: true,

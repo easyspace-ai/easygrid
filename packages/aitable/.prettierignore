@@ -1,9 +1,0 @@
-dist
-node_modules
-*.log
-coverage
-.cache
-pnpm-lock.yaml
-*.min.js
-*.map
-

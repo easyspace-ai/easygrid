@@ -35,13 +35,13 @@ export default function SpaceDetailPage() {
 
     try {
       setLoading(true);
-      const [spaceData, basesData] = await Promise.all([
+      const [spaceData, basesRes] = await Promise.all([
         luckdb.spaces.getOne(spaceId),
-        luckdb.bases.getList({ spaceId }),
+        luckdb.bases.getList(spaceId, 1, 200),
       ]);
 
-      setSpace(spaceData);
-      setBases(basesData);
+      setSpace(spaceData as any);
+      setBases((Array.isArray(basesRes) ? basesRes : basesRes.items) as any);
     } catch (error: any) {
       console.error('Failed to load space:', error);
       toast.error(error?.message || '加载空间失败');
@@ -58,8 +58,7 @@ export default function SpaceDetailPage() {
 
     try {
       setCreating(true);
-      const newBase = await luckdb.bases.create({
-        spaceId,
+      const newBase = await luckdb.bases.create(spaceId, {
         name: newBaseName.trim(),
         description: newBaseDescription.trim() || undefined,
       });
@@ -81,14 +80,16 @@ export default function SpaceDetailPage() {
 
   const handleBaseClick = async (baseId: string) => {
     try {
-      const tables = await luckdb.tables.getList({ baseId });
+      const tablesRes = await luckdb.tables.getList(baseId, 1, 200);
+      const tables = Array.isArray(tablesRes) ? tablesRes : tablesRes.items;
       if (tables.length === 0) {
         toast.error('该数据库中没有表格');
         return;
       }
 
       const firstTable = tables[0];
-      const views = await luckdb.views.getList(firstTable.id);
+      const viewsRes = await luckdb.views.getList(firstTable.id, 1, 200);
+      const views = Array.isArray(viewsRes) ? viewsRes : viewsRes.items;
       if (views.length === 0) {
         toast.error('该表格中没有视图');
         return;

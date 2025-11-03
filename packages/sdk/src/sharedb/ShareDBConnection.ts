@@ -48,7 +48,8 @@ export interface ShareDBConnectionStatus {
 
 export class ShareDBConnection extends EventEmitter {
   private url: string
-  private ws: ReconnectingWebSocket
+  // 兼容原生 WebSocket 与 ReconnectingWebSocket
+  private ws: any
   private options: ShareDBConnectionOptions
   private heartbeatInterval: ReturnType<typeof setInterval> | null = null
   private reconnectAttempts = 0
@@ -72,15 +73,22 @@ export class ShareDBConnection extends EventEmitter {
       ...options
     }
 
-    this.ws = new ReconnectingWebSocket(this.url, [], {
-      WebSocket: WebSocketClass,
-      maxEnqueuedMessages: 0,
-      reconnectionDelayGrowFactor: 1.5,
-      maxReconnectionDelay: this.options.maxReconnectDelay!,
-      minReconnectionDelay: this.options.reconnectDelay!,
-      connectionTimeout: 4000,
-      maxRetries: Infinity
-    })
+    console.log('[ShareDBConnection] 创建连接，URL:', this.url)
+
+    // 在浏览器里优先使用原生 WebSocket，避免第三方库与某些代理/环境不兼容导致的握手超时
+    if (typeof window !== 'undefined' && typeof WebSocketClass !== 'undefined') {
+      this.ws = new WebSocketClass(this.url)
+    } else {
+      this.ws = new ReconnectingWebSocket(this.url, [], {
+        WebSocket: WebSocketClass,
+        maxEnqueuedMessages: 0,
+        reconnectionDelayGrowFactor: 1.5,
+        maxReconnectionDelay: this.options.maxReconnectDelay!,
+        minReconnectionDelay: this.options.reconnectDelay!,
+        connectionTimeout: 10000,
+        maxRetries: Infinity
+      })
+    }
 
     this.setupEventListeners()
     this.setupHeartbeat()
@@ -113,7 +121,7 @@ export class ShareDBConnection extends EventEmitter {
   }
 
   unsubscribe(collection: string, docId: string): void {
-    this.sendMessage({ a: 'u', c: collection, d: docId })
+    this.sendMessage({ a: 'us', c: collection, d: docId })
   }
 
   fetch(collection: string, docId: string): Promise<any> {
@@ -156,6 +164,7 @@ export class ShareDBConnection extends EventEmitter {
 
   private setupEventListeners(): void {
     this.ws.addEventListener('open', () => {
+      console.log('[ShareDBConnection] WebSocket 连接已打开')
       this.reconnectAttempts = 0
       this.status.connected = true
       this.status.reconnecting = false
@@ -164,12 +173,14 @@ export class ShareDBConnection extends EventEmitter {
       this.emit('connected')
     })
 
-    this.ws.addEventListener('close', () => {
+    this.ws.addEventListener('close', (event: any) => {
+      console.log('[ShareDBConnection] WebSocket 连接已关闭', { code: event.code, reason: event.reason })
       this.status.connected = false
       this.emit('disconnected')
     })
 
     this.ws.addEventListener('error', (err: any) => {
+      console.error('[ShareDBConnection] WebSocket 错误:', err)
       this.status.lastError = new Error(err?.message || 'WebSocket error')
       this.emit('error', this.status.lastError)
     })

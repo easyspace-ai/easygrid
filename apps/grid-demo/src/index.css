@@ -1,0 +1,8 @@
+@import "tailwindcss";
+@source "./**/*.{ts,tsx,html}";
+@source "../../packages/grid/src/**/*.{ts,tsx}";
+@source "/Users/leven/space/b/easygrid/packages/grid/src/**/*.{ts,tsx}";
+
+/* 仅保持容器高度，不覆盖任何主题变量，避免与库样式冲突 */
+html, body, #root { height: 100%; }
+

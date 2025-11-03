@@ -19,9 +19,10 @@ func JWTAuthMiddleware(authService *application.AuthService) gin.HandlerFunc {
 		var token string
 		var tokenSource string
 
-		// 检测是否是 WebSocket 请求
-		isWebSocket := c.Request.Header.Get("Connection") == "Upgrade" &&
-			c.Request.Header.Get("Upgrade") == "websocket"
+        // 检测是否是 WebSocket 请求（大小写与包含判断，兼容代理转发）
+        connHeader := strings.ToLower(c.Request.Header.Get("Connection"))
+        upgradeHeader := strings.ToLower(c.Request.Header.Get("Upgrade"))
+        isWebSocket := (strings.Contains(connHeader, "upgrade")) && (upgradeHeader == "websocket")
 
 		// 优先从 Authorization header 获取 token
 		authHeader := c.GetHeader("Authorization")
@@ -34,12 +35,20 @@ func JWTAuthMiddleware(authService *application.AuthService) gin.HandlerFunc {
 			}
 		}
 
-		// 如果 header 中没有，尝试从查询参数获取（用于 WebSocket 连接）
+        // 如果 header 中没有，尝试从查询参数获取（用于 WebSocket 连接）
 		if token == "" {
-			token = c.Query("token")
-			if token != "" {
-				tokenSource = "query"
-			}
+            q := c.Query("token")
+            if q == "" {
+                q = c.Query("access_token")
+            }
+            // 兼容可能附带的 "Bearer " 前缀
+            if strings.HasPrefix(strings.ToLower(q), "bearer ") {
+                q = strings.TrimSpace(q[7:])
+            }
+            if q != "" {
+                token = q
+                tokenSource = "query"
+            }
 		}
 
 		// 记录认证调试信息

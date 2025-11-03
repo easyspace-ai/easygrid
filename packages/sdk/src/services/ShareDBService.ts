@@ -27,6 +27,7 @@ export class ShareDBService extends EventEmitter {
 
     // 构建 WebSocket URL
     const wsURL = this.buildWebSocketURL()
+    console.log('[ShareDBService] 初始化连接，WebSocket URL:', wsURL)
     
     // 合并选项
     const connectionOptions: ShareDBConnectionOptions = {
@@ -204,15 +205,43 @@ export class ShareDBService extends EventEmitter {
 
   /**
    * 构建 WebSocket URL
+   * 在开发环境中，如果 baseURL 是 localhost，使用相对路径以利用 Vite 代理
+   * 在生产环境中，使用完整的 WebSocket URL
    */
   private buildWebSocketURL(): string {
-    const baseURL = this.client.baseURL
-    const token = this.client.authStore.token
-    const wsURL = baseURL.replace(/^http/, 'ws') + '/socket'
+    let baseURL = this.client.baseURL
+    let token = this.client.authStore.token
     
+    // 检查是否是开发环境（Vite 环境变量）
+    const isDev = typeof window !== 'undefined' && 
+      (window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1')
+    
+    let wsURL: string
+    
+    // 开发环境优先使用相对路径，走 Vite 代理，规避跨域/证书/网段限制
+    if (isDev) {
+      wsURL = '/socket'
+    } else {
+      // 生产环境使用完整后端地址
+      try {
+        const u = new URL(baseURL)
+        if (u.hostname === 'localhost') {
+          u.hostname = '127.0.0.1'
+          baseURL = u.toString().replace(/\/$/, '')
+        }
+      } catch {}
+      wsURL = baseURL.replace(/^http/, 'ws') + '/socket'
+    }
+    
+    // 规范化 token：若带有 "Bearer " 前缀则剥离
+    if (token && /^bearer\s+/i.test(token)) {
+      token = token.replace(/^bearer\s+/i, '').trim()
+    }
+
     // 添加token作为查询参数
     if (token) {
-      return `${wsURL}?token=${encodeURIComponent(token)}`
+      const separator = wsURL.includes('?') ? '&' : '?'
+      return `${wsURL}${separator}token=${encodeURIComponent(token)}`
     }
     
     return wsURL

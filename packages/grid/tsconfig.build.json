@@ -1,0 +1,31 @@
+{
+  "extends": "./tsconfig.app.json",
+  "compilerOptions": {
+    "noEmit": false,
+    "declaration": true,
+    "emitDeclarationOnly": true,
+    "declarationMap": true,
+    "outDir": "./dist",
+    "rootDir": "./src",
+    "stripInternal": false,
+    "strict": false,
+    "noUnusedLocals": false,
+    "noUnusedParameters": false,
+    "types": ["vite/client", "node"]
+  },
+  "include": [
+    "src/index.ts",
+    "src/integrations/**/*",
+    "src/components/data-grid/**/*",
+    "src/components/ui/**/*",
+    "src/hooks/**/*",
+    "src/utils/**/*"
+  ],
+  "exclude": [
+    "src/components/demos/**",
+    "src/components/data-table/**",
+    "src/lib/**",
+    "src/App.tsx"
+  ]
+}
+

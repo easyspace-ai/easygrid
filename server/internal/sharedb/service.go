@@ -213,7 +213,7 @@ func (s *ShareDBService) HandleWebSocket(c *gin.Context) {
 		HandshakeTimeout: 10 * time.Second,
 	}
 
-	conn, err := upgrader.Upgrade(c.Writer, c.Request, nil)
+    conn, err := upgrader.Upgrade(c.Writer, c.Request, nil)
 	if err != nil {
 		s.logger.Error("Failed to upgrade WebSocket connection",
 			zap.Error(err),
@@ -286,6 +286,15 @@ func (s *ShareDBService) HandleWebSocket(c *gin.Context) {
 		return nil
 	})
 
+    // 记录 close 帧并尽早结束读循环
+    conn.SetCloseHandler(func(code int, text string) error {
+        s.logger.Info("WebSocket close frame received",
+            zap.String("connection_id", connection.ID),
+            zap.Int("code", code),
+            zap.String("reason", text))
+        return nil
+    })
+
 	// 创建 done channel 用于控制 ping goroutine 的生命周期
 	pingDone := make(chan struct{})
 	defer close(pingDone)
@@ -343,7 +352,11 @@ func (s *ShareDBService) handleConnection(conn *websocket.Conn, connection *Conn
 		}
 	}()
 
-	for {
+    s.logger.Info("ShareDB read loop started",
+        zap.String("connection_id", connection.ID),
+        zap.String("user_id", connection.UserID))
+
+    for {
 		select {
 		case <-s.ctx.Done():
 			return
@@ -356,7 +369,7 @@ func (s *ShareDBService) handleConnection(conn *websocket.Conn, connection *Conn
 		// 读取消息 - 添加panic恢复
 		var data []byte
 		var err error
-		func() {
+        func() {
 			defer func() {
 				if r := recover(); r != nil {
 					s.logger.Error("Panic during WebSocket read",
@@ -378,7 +391,9 @@ func (s *ShareDBService) handleConnection(conn *websocket.Conn, connection *Conn
 					s.logger.Debug("Failed to send ping, connection is dead",
 						zap.String("connection_id", connection.ID),
 						zap.Error(err))
-					return
+                    s.logger.Info("Exiting read loop due to dead connection after ping",
+                        zap.String("connection_id", connection.ID))
+                    return
 				}
 				continue
 			}
@@ -388,7 +403,7 @@ func (s *ShareDBService) handleConnection(conn *websocket.Conn, connection *Conn
 				s.logger.Info("ShareDB WebSocket connection closed normally",
 					zap.String("connection_id", connection.ID),
 					zap.String("error", err.Error()))
-				break
+                return
 			}
 
 			// 检查是否是连接重置或管道破裂错误
@@ -399,14 +414,14 @@ func (s *ShareDBService) handleConnection(conn *websocket.Conn, connection *Conn
 				s.logger.Debug("WebSocket connection lost (client disconnected)",
 					zap.String("connection_id", connection.ID),
 					zap.String("error", err.Error()))
-				break
+                return
 			}
 
 			// 其他错误
 			s.logger.Error("ShareDB WebSocket connection error",
 				zap.Error(err),
 				zap.String("connection_id", connection.ID))
-			break
+            return
 		}
 
 		// 更新最后活跃时间
