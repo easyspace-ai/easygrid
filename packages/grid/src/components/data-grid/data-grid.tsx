@@ -13,7 +13,7 @@ import { cn } from "../../lib/utils";
 interface DataGridProps<TData>
   extends ReturnType<typeof useDataGrid<TData>>,
     React.ComponentProps<"div"> {
-  height?: number;
+  height?: number | 'auto';
   onDeleteField?: (fieldId: string) => void | Promise<void>;
   onUpdateField?: (fieldId: string, config: { type: string; name?: string; options?: any }) => void | Promise<void>;
   getFieldInfo?: (columnId: string) => { name: string; type: string; options?: any } | null;
@@ -39,6 +39,55 @@ export function DataGrid<TData>({
 }: DataGridProps<TData>) {
   const rows = table.getRowModel().rows;
   const columns = table.getAllColumns();
+  
+  // 当 height 为 'auto' 时，需要动态计算可用高度
+  const [calculatedHeight, setCalculatedHeight] = React.useState<number | undefined>(
+    height === 'auto' ? undefined : height
+  );
+  
+  // 当 height='auto' 时，使用 useEffect 动态计算容器高度
+  React.useEffect(() => {
+    if (height !== 'auto') {
+      setCalculatedHeight(undefined);
+      return;
+    }
+    
+    const calculateHeight = () => {
+      if (!dataGridRef.current) return;
+      const container = dataGridRef.current;
+      const header = container.querySelector('[data-slot="grid-header"]') as HTMLElement;
+      const footer = container.querySelector('[data-slot="grid-footer"]') as HTMLElement;
+      
+      if (header && container.clientHeight > 0) {
+        const containerHeight = container.clientHeight;
+        const headerHeight = header.offsetHeight;
+        const footerHeight = footer?.offsetHeight || 0;
+        const availableHeight = containerHeight - headerHeight - footerHeight;
+        setCalculatedHeight(Math.max(400, availableHeight));
+      }
+    };
+    
+    // 延迟计算，确保 DOM 已渲染
+    const timeoutId = setTimeout(() => {
+      calculateHeight();
+    }, 0);
+    
+    // 使用 ResizeObserver 监听容器尺寸变化
+    const resizeObserver = new ResizeObserver(() => {
+      calculateHeight();
+    });
+    
+    if (dataGridRef.current) {
+      resizeObserver.observe(dataGridRef.current);
+    }
+    
+    return () => {
+      clearTimeout(timeoutId);
+      resizeObserver.disconnect();
+    };
+  }, [height]);
+  
+  const actualHeight = height === 'auto' ? calculatedHeight : height;
   
   // 详细调试：检查实际数据状态
   React.useEffect(() => {
@@ -132,10 +181,13 @@ export function DataGrid<TData>({
         data-slot="grid"
         tabIndex={0}
         ref={dataGridRef}
-        className="relative grid select-none overflow-auto rounded-b-md border-t focus:outline-none"
+        className={cn(
+          "relative grid select-none overflow-auto rounded-b-md border-t focus:outline-none",
+          height === 'auto' ? "flex-1" : ""
+        )}
         style={{
           ...columnSizeVars,
-          height: `${height}px`,
+          ...(height !== 'auto' ? { height: `${height}px` } : {}),
         }}
         onContextMenu={onGridContextMenu}
       >
@@ -157,7 +209,7 @@ export function DataGrid<TData>({
               <DraggableColumnHeaders
                 headers={headerGroup.headers}
                 table={table}
-                gridHeight={height}
+                gridHeight={actualHeight || 600}
                 headerElementRef={headerRef as React.RefObject<HTMLElement>}
                 gridContainerRef={dataGridRef as React.RefObject<HTMLElement>}
                 onDragStateChange={setDragState}
@@ -175,8 +227,13 @@ export function DataGrid<TData>({
           data-slot="grid-body"
           className="relative grid"
           style={{
-            minHeight: `${height}px`,
-            height: `${Math.max(rowVirtualizer.getTotalSize(), height)}px`,
+            ...(actualHeight !== undefined ? {
+              minHeight: `${actualHeight}px`,
+              height: `${Math.max(rowVirtualizer.getTotalSize(), actualHeight)}px`,
+            } : typeof height === 'number' ? {
+              minHeight: `${height}px`,
+              height: `${Math.max(rowVirtualizer.getTotalSize(), height)}px`,
+            } : {}),
           }}
         >
           {rowVirtualizer.getVirtualIndexes().map((virtualRowIndex) => {

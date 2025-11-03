@@ -403,19 +403,35 @@ export function AddColumnMenu({
     }
   };
 
-  // 点击外部关闭：改为仅通过遮罩关闭，避免文档级事件误判导致菜单被立即关闭
-  // （若需要更严格外点判断，可在未来改回 document 监听并配合 e.stopPropagation）
+  // 监听外部点击：在配置步骤时，点击菜单外部关闭
+  useEffect(() => {
+    if (!isOpen || step !== 'configure') return;
+
+    const handleClickOutside = (event: MouseEvent) => {
+      const target = event.target as Node;
+      // 如果点击在菜单内，不关闭
+      if (menuRef.current && menuRef.current.contains(target)) {
+        return;
+      }
+      // 点击在菜单外，关闭
+      onClose();
+    };
+
+    // 使用冒泡阶段监听
+    document.addEventListener('mousedown', handleClickOutside);
+
+    return () => {
+      document.removeEventListener('mousedown', handleClickOutside);
+    };
+  }, [isOpen, step, onClose]);
 
   if (!isOpen) return null;
 
   return (
     <>
-      {/* 背景遮罩：仅在配置步骤时允许点击关闭 */}
+      {/* 背景遮罩：仅在配置步骤时显示，用于视觉反馈 */}
       {step === 'configure' && (
-        <div
-          className="fixed inset-0 z-50 bg-transparent"
-          onClick={onClose}
-        />
+        <div className="fixed inset-0 z-50 bg-transparent pointer-events-none" />
       )}
 
       {/* 菜单主体（两步式）*/}
@@ -432,10 +448,6 @@ export function AddColumnMenu({
           maxHeight: position.maxHeight,
         }}
         onKeyDown={handleKeyDown}
-        onMouseDown={(e) => {
-          // 防止点击在菜单内部时冒泡到遮罩导致菜单被关闭
-          e.stopPropagation();
-        }}
         tabIndex={-1}
       >
         {step === 'select' ? (
@@ -552,7 +564,7 @@ export function AddColumnMenu({
               <div className="flex items-center gap-1.5 text-xs text-muted-foreground">
                 <span className="rounded border border-border bg-muted px-2 py-1">{selectedType?.name}</span>
                 <button 
-                  onClick={() => setStep('select')} 
+                  onClick={() => setStep('select')}
                   className="ml-auto cursor-pointer bg-transparent border-0 text-xs text-primary hover:underline"
                 >
                   更改类型
@@ -561,7 +573,10 @@ export function AddColumnMenu({
             </div>
 
             {/* 配置区：覆盖单/多选和公式 */}
-            <div className="overflow-y-auto p-3" style={{ maxHeight: position.maxHeight - 120 }}>
+            <div 
+              className="overflow-y-auto p-3" 
+              style={{ maxHeight: position.maxHeight - 120 }}
+            >
               {selectedType?.id === 'select' || selectedType?.id === 'multi-select' ? (
                 <SelectOptionsEditor value={fieldOptions} onChange={setFieldOptions} />
               ) : selectedType?.id === 'formula' ? (
@@ -576,15 +591,13 @@ export function AddColumnMenu({
             {/* 底部操作 */}
             <div className="sticky bottom-0 flex gap-2 border-t bg-background p-3 justify-end">
               <button 
-                onClick={onClose} 
+                onClick={onClose}
                 className="rounded-md border border-input bg-background px-3 py-2 text-sm cursor-pointer text-foreground hover:bg-accent"
               >
                 取消
               </button>
               <button 
-                onClick={(e) => {
-                  e.stopPropagation();
-                  
+                onClick={() => {
                   if (!selectedType) {
                     return;
                   }
@@ -600,7 +613,7 @@ export function AddColumnMenu({
                   
                   onConfirm?.(payload);
                   onClose();
-                }} 
+                }}
                 className="rounded-md border-0 bg-primary px-3 py-2 text-sm cursor-pointer text-primary-foreground hover:bg-primary/90"
               >
                 {initialType ? '保存更改' : '创建字段'}
@@ -644,10 +657,16 @@ function SelectOptionsEditor({ value, onChange }: { value: any; onChange: (val: 
           <input
             value={opt.name}
             onChange={(e) => updateName(idx, e.target.value)}
+            onMouseDown={(e) => e.stopPropagation()}
+            onClick={(e) => e.stopPropagation()}
             className="flex-1 rounded-md border border-input bg-background px-2 py-1.5 text-sm outline-none transition-colors focus:border-ring"
           />
           <button 
-            onClick={() => remove(idx)} 
+            onClick={(e) => {
+              e.stopPropagation();
+              remove(idx);
+            }}
+            onMouseDown={(e) => e.stopPropagation()}
             className="rounded-md border border-input bg-background px-2 py-1.5 text-xs cursor-pointer hover:bg-accent"
           >
             删除
@@ -655,7 +674,11 @@ function SelectOptionsEditor({ value, onChange }: { value: any; onChange: (val: 
         </div>
       ))}
       <button 
-        onClick={addOption} 
+        onClick={(e) => {
+          e.stopPropagation();
+          addOption();
+        }}
+        onMouseDown={(e) => e.stopPropagation()}
         className="self-start rounded-md border border-input bg-muted px-3 py-2 text-sm cursor-pointer hover:bg-accent"
       >
         + 添加选项
@@ -678,6 +701,8 @@ function FormulaEditor({ value, onChange }: { value: any; onChange: (val: any) =
       <textarea
         value={expression}
         onChange={(e) => handleExpressionChange(e.target.value)}
+        onMouseDown={(e) => e.stopPropagation()}
+        onClick={(e) => e.stopPropagation()}
         placeholder="输入公式，例如：{字段1} + {字段2} 或 {数量} * {单价}"
         className="w-full min-h-[120px] rounded-md border border-input bg-background px-3 py-2 text-sm font-mono outline-none transition-colors focus:border-ring focus:ring-2 focus:ring-ring/20 resize-none"
         style={{ fontFamily: 'monospace' }}
@@ -750,6 +775,8 @@ function AIFieldEditor({ value, onChange }: { value: any; onChange: (val: any) =
                 value={option.value}
                 checked={task === option.value}
                 onChange={(e) => handleTaskChange(e.target.value)}
+                onMouseDown={(e) => e.stopPropagation()}
+                onClick={(e) => e.stopPropagation()}
                 className="size-4"
               />
               <span className="text-sm">{option.label}</span>
@@ -765,6 +792,8 @@ function AIFieldEditor({ value, onChange }: { value: any; onChange: (val: any) =
           <textarea
             value={prompt}
             onChange={(e) => handlePromptChange(e.target.value)}
+            onMouseDown={(e) => e.stopPropagation()}
+            onClick={(e) => e.stopPropagation()}
             placeholder="输入提示词，例如：基于 {Trick name} 和 {Score} 生成一段描述"
             className="w-full min-h-[80px] rounded-md border border-input bg-background px-3 py-2 text-sm outline-none transition-colors focus:border-ring focus:ring-2 focus:ring-ring/20 resize-none"
           />
@@ -789,6 +818,8 @@ function AIFieldEditor({ value, onChange }: { value: any; onChange: (val: any) =
                 value={option.value}
                 checked={trigger === option.value}
                 onChange={(e) => handleTriggerChange(e.target.value)}
+                onMouseDown={(e) => e.stopPropagation()}
+                onClick={(e) => e.stopPropagation()}
                 className="size-4"
               />
               <span className="text-sm">{option.label}</span>
@@ -804,6 +835,8 @@ function AIFieldEditor({ value, onChange }: { value: any; onChange: (val: any) =
             type="checkbox"
             checked={cache}
             onChange={(e) => handleCacheChange(e.target.checked)}
+            onMouseDown={(e) => e.stopPropagation()}
+            onClick={(e) => e.stopPropagation()}
             className="size-4"
           />
           <span className="text-sm">启用缓存（相同输入复用结果）</span>

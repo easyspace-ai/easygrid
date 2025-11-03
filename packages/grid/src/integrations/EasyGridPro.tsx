@@ -12,7 +12,7 @@ export interface EasyGridProProps {
   tableId?: string
   spaceId?: string
   baseId?: string
-  height?: number
+  height?: number | 'auto'
   showShareDBBadge?: boolean
   enableAddRecordDialog?: boolean
 }

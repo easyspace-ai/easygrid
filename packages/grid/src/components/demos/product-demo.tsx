@@ -19,6 +19,7 @@ import { toast } from "sonner";
 import { Badge } from "../ui/badge";
 import { testTableConfig } from "../../config/testTable";
 import type { Field } from "@easygrid/sdk";
+import { cn } from "../../lib/utils";
 
 interface TableRecord {
   id: string;
@@ -26,7 +27,7 @@ interface TableRecord {
 }
 
 export interface ProductGridDemoProps {
-  height?: number
+  height?: number | 'auto'
   showShareDBBadge?: boolean
   enableAddRecordDialog?: boolean
 }
@@ -44,6 +45,31 @@ export default function DataGridDemo(props: ProductGridDemoProps = {}) {
   const [, setRecordVersions] = React.useState<Map<string, number>>(new Map()); // recordId -> version
   const [fields, setFields] = React.useState<Field[]>([]); // 保存字段列表
   const [isAddRecordDialogOpen, setIsAddRecordDialogOpen] = React.useState(false);
+
+  // 监听 testTableConfig 的变化并更新 tableId
+  // 注意：当组件通过 key 重新挂载时，会自动从 testTableConfig 读取最新的 tableId
+  // 这里只是作为备用机制，确保在组件不重新挂载时也能响应配置变化
+  React.useEffect(() => {
+    const checkTableIdChange = () => {
+      const currentTableId = testTableConfig.tableId;
+      if (currentTableId && currentTableId !== tableId) {
+        console.log("[ProductGridDemo] 检测到 tableId 变化:", { from: tableId, to: currentTableId });
+        setTableId(currentTableId);
+        // 清空旧数据，准备加载新表格数据
+        setData([]);
+        setColumns([]);
+        setFields([]);
+        setFieldMapping(new Map());
+        setColumnToFieldMapping(new Map());
+      }
+    };
+
+    // 每 200ms 检查一次配置变化（降低频率以提高性能）
+    const interval = setInterval(checkTableIdChange, 200);
+    // 立即检查一次
+    checkTableIdChange();
+    return () => clearInterval(interval);
+  }, [tableId]);
 
   // 检查认证状态
   React.useEffect(() => {
@@ -69,7 +95,9 @@ export default function DataGridDemo(props: ProductGridDemoProps = {}) {
           // 使用测试表格配置
           const testTableId = testTableConfig.tableId;
           console.log("[checkAuth] 设置 tableId:", testTableId);
-          setTableId(testTableId);
+          if (testTableId) {
+            setTableId(testTableId);
+          }
         } else {
           setIsAuthenticated(false);
         }
@@ -1191,8 +1219,8 @@ export default function DataGridDemo(props: ProductGridDemoProps = {}) {
           onSubmit={handleAddRecord}
         />
       )}
-      <div className="flex flex-col rounded-md border">
-        <div className="flex items-center justify-between border-b bg-background px-4 py-2 gap-4" data-testid="toolbar-container">
+      <div className={cn("flex flex-col rounded-md border", height === 'auto' ? "h-full" : "")}>
+        <div className="flex items-center justify-between border-b bg-background px-4 py-2 gap-4 shrink-0" data-testid="toolbar-container">
           <div className="flex-1">
             <DataGridToolbar
               table={table}
@@ -1245,14 +1273,16 @@ export default function DataGridDemo(props: ProductGridDemoProps = {}) {
           </div>
           )}
         </div>
-        <DataGrid 
-          {...dataGridProps} 
-          table={table} 
-          height={height} 
-          onDeleteField={onDeleteField}
-          onUpdateField={onUpdateField}
-          getFieldInfo={getFieldInfo}
-        />
+        <div className={cn(height === 'auto' ? "flex-1 min-h-0" : "")}>
+          <DataGrid 
+            {...dataGridProps} 
+            table={table} 
+            height={height} 
+            onDeleteField={onDeleteField}
+            onUpdateField={onUpdateField}
+            getFieldInfo={getFieldInfo}
+          />
+        </div>
       </div>
     </>
   );

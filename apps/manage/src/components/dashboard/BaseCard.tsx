@@ -8,7 +8,7 @@
  * 4. 流畅的动画反馈
  */
 
-import { useState } from 'react'
+import { useState, useRef } from 'react'
 import { Database, MoreHorizontal, Settings, Trash2, ExternalLink } from 'lucide-react'
 import { Card } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
@@ -31,6 +31,8 @@ interface BaseCardProps {
 
 export function BaseCard({ base, onClick, onEdit, onDelete }: BaseCardProps) {
   const [isHovered, setIsHovered] = useState(false)
+  const [menuOpen, setMenuOpen] = useState(false)
+  const rightClickRef = useRef(false)
 
   return (
     <div className="animate-in fade-in zoom-in-95 duration-200">
@@ -43,7 +45,34 @@ export function BaseCard({ base, onClick, onEdit, onDelete }: BaseCardProps) {
           'hover:shadow-md hover:-translate-y-0.5',
           'active:shadow-sm active:scale-[0.98]',
         )}
-        onClick={onClick}
+        onMouseDown={(e) => {
+          // 右键点击
+          if (e.button === 2) {
+            e.preventDefault()
+            e.stopPropagation()
+            rightClickRef.current = true
+            setMenuOpen(true)
+            // 延迟重置标志，防止后续的 click 事件触发
+            setTimeout(() => {
+              rightClickRef.current = false
+            }, 300)
+          } else {
+            rightClickRef.current = false
+          }
+        }}
+        onClick={(e) => {
+          // 如果标志位为 true，说明是右键触发的，不执行点击操作
+          if (rightClickRef.current || menuOpen) {
+            e.preventDefault()
+            e.stopPropagation()
+            return
+          }
+          onClick?.()
+        }}
+        onContextMenu={(e) => {
+          e.preventDefault()
+          e.stopPropagation()
+        }}
         onMouseEnter={() => setIsHovered(true)}
         onMouseLeave={() => setIsHovered(false)}
       >
@@ -82,21 +111,22 @@ export function BaseCard({ base, onClick, onEdit, onDelete }: BaseCardProps) {
                     isHovered ? 'opacity-100 scale-100' : 'opacity-0 scale-95'
                   )}
                 >
-                  <DropdownMenu>
+                  <DropdownMenu 
+                    open={menuOpen}
+                    onOpenChange={(open) => setMenuOpen(open)}
+                  >
                     <DropdownMenuTrigger asChild>
-                      <Button
-                        variant="ghost"
-                        size="icon"
-                        className="h-7 w-7 shrink-0"
-                        onClick={(e) => e.stopPropagation()}
-                      >
-                        <MoreHorizontal className="h-4 w-4" />
-                      </Button>
+                      <button
+                        type="button"
+                        className="absolute inset-0 opacity-0 pointer-events-none"
+                        aria-label="右键菜单"
+                      />
                     </DropdownMenuTrigger>
                     <DropdownMenuContent align="end" className="w-44">
                       <DropdownMenuItem
                         onClick={(e) => {
                           e.stopPropagation()
+                          setMenuOpen(false)
                           onClick?.()
                         }}
                       >
@@ -106,6 +136,7 @@ export function BaseCard({ base, onClick, onEdit, onDelete }: BaseCardProps) {
                       <DropdownMenuItem
                         onClick={(e) => {
                           e.stopPropagation()
+                          setMenuOpen(false)
                           onEdit?.()
                         }}
                       >
@@ -116,6 +147,7 @@ export function BaseCard({ base, onClick, onEdit, onDelete }: BaseCardProps) {
                       <DropdownMenuItem
                         onClick={(e) => {
                           e.stopPropagation()
+                          setMenuOpen(false)
                           onDelete?.()
                         }}
                         className="text-red-600 focus:text-red-600"
