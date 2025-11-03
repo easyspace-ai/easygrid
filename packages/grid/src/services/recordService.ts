@@ -5,7 +5,7 @@ import type {
   ListResponse,
   PaginationResponse,
 } from '@easygrid/sdk'
-import { luckdbClient } from '@/config/client'
+import { luckdbClient } from "../config/client"
 
 /**
  * 记录服务封装

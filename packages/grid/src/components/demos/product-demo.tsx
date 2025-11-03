@@ -2,22 +2,22 @@
 
 import type { ColumnDef } from "@tanstack/react-table";
 import * as React from "react";
-import { DataGrid } from "@/components/data-grid/data-grid";
-import { DataGridKeyboardShortcuts } from "@/components/data-grid/data-grid-keyboard-shortcuts";
-import { DataGridToolbar } from "@/components/data-grid/data-grid-toolbar";
-import { AddRecordDialog } from "@/components/data-grid/add-record-dialog";
-import { useDataGrid } from "@/hooks/use-data-grid";
-import type { FilterCondition } from "@/components/data-grid/data-grid-filter-menu";
-import { applyFilters } from "@/utils/data-grid-filter";
-import { Login } from "@/components/auth/login";
-import { luckdbClient } from "@/config/client";
-import { recordService, transformRecordToTableData } from "@/services/recordService";
-import { mapFieldTypeToCellVariant, mapFieldOptionsToCellOptions } from "@/services/fieldMapper";
-import { buildCellType } from "@/services/cellTypeHelper";
-import { useShareDBSync } from "@/hooks/use-sharedb-sync";
+import { DataGrid } from "../data-grid/data-grid";
+import { DataGridKeyboardShortcuts } from "../data-grid/data-grid-keyboard-shortcuts";
+import { DataGridToolbar } from "../data-grid/data-grid-toolbar";
+import { AddRecordDialog } from "../data-grid/add-record-dialog";
+import { useDataGrid } from "../../hooks/use-data-grid";
+import type { FilterCondition } from "../data-grid/data-grid-filter-menu";
+import { applyFilters } from "../../utils/data-grid-filter";
+import { Login } from "../auth/login";
+import { luckdbClient } from "../../config/client";
+import { recordService, transformRecordToTableData } from "../../services/recordService";
+import { mapFieldTypeToCellVariant, mapFieldOptionsToCellOptions } from "../../services/fieldMapper";
+import { buildCellType } from "../../services/cellTypeHelper";
+import { useShareDBSync } from "../../hooks/use-sharedb-sync";
 import { toast } from "sonner";
-import { Badge } from "@/components/ui/badge";
-import { testTableConfig } from "@/config/testTable";
+import { Badge } from "../ui/badge";
+import { testTableConfig } from "../../config/testTable";
 import type { Field } from "@easygrid/sdk";
 
 interface TableRecord {

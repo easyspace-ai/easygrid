@@ -1,4 +1,4 @@
-import type { Cell } from '@/types/data-grid'
+import type { Cell } from "../types/data-grid"
 import type { DiceCellVariant } from './fieldMapper'
 
 /**

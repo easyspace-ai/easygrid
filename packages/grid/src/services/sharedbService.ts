@@ -1,5 +1,5 @@
 import type { ShareDBOperation, ShareDBDocEvent } from '@easygrid/sdk'
-import { luckdbClient } from '@/config/client'
+import { luckdbClient } from "../config/client"
 
 /**
  * ShareDB 服务封装

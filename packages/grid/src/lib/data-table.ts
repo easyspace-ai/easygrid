@@ -1,6 +1,6 @@
 import type { Column } from "@tanstack/react-table";
 import type React from "react";
-import { dataTableConfig } from "@/config/data-table";
+import { dataTableConfig } from "../config/data-table";
 
 // 轻量类型，避免依赖缺失
 export type FilterOperator = string;

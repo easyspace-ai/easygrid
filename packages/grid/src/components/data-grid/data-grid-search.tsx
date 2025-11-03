@@ -2,10 +2,10 @@
 
 import { ChevronDown, ChevronUp, X } from "lucide-react";
 import * as React from "react";
-import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
-import { useDebouncedCallback } from "@/hooks/use-debounced-callback";
-import type { SearchState } from "@/types/data-grid";
+import { Button } from "../ui/button";
+import { Input } from "../ui/input";
+import { useDebouncedCallback } from "../../hooks/use-debounced-callback";
+import type { SearchState } from "../../types/data-grid";
 
 interface DataGridSearchProps extends SearchState {}
 

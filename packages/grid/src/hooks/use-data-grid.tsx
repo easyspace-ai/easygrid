@@ -13,8 +13,8 @@ import {
 } from "@tanstack/react-table";
 import { useVirtualizer, type Virtualizer } from "@tanstack/react-virtual";
 import * as React from "react";
-import { DataGridCell } from "@/components/data-grid/data-grid-cell";
-import { getCellKey, getRowHeightValue, parseCellKey } from "@/lib/data-grid";
+import { DataGridCell } from "../components/data-grid/data-grid-cell";
+import { getCellKey, getRowHeightValue, parseCellKey } from "../lib/data-grid";
 import type {
   CellPosition,
   ContextMenuState,
@@ -23,7 +23,7 @@ import type {
   SearchState,
   SelectionState,
   UpdateCell,
-} from "@/types/data-grid";
+} from "../types/data-grid";
 
 const DEFAULT_ROW_HEIGHT = "short";
 const OVERSCAN = 3;

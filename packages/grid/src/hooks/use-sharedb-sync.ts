@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useRef, useState, useMemo } from 'react'
 import type { ShareDBDocEvent } from '@easygrid/sdk'
-import { createShareDBService } from '@/services/sharedbService'
-import type { ShareDBService } from '@/services/sharedbService'
+import { createShareDBService } from "../services/sharedbService"
+import type { ShareDBService } from "../services/sharedbService"
 
 interface UseShareDBSyncOptions {
   tableId: string | null

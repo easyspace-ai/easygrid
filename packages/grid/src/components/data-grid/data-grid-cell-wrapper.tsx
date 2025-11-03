@@ -2,7 +2,7 @@
 
 import type { Cell, Table } from "@tanstack/react-table";
 import * as React from "react";
-import { cn } from "@/lib/utils";
+import { cn } from "../../lib/utils";
 
 interface DataGridCellWrapperProps<TData> extends React.ComponentProps<"div"> {
   cell: Cell<TData, unknown>;

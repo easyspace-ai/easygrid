@@ -10,7 +10,7 @@
 
 import * as React from "react";
 import type { Cell, Table } from "@tanstack/react-table";
-import { defaultAIService, type AIRequest, type AIResponse } from "@/services/ai-service";
+import { defaultAIService, type AIRequest, type AIResponse } from "../services/ai-service";
 
 export type AIFieldState = "idle" | "generating" | "success" | "error" | "cached";
 

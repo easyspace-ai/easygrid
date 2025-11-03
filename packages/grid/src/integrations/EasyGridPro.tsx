@@ -1,8 +1,8 @@
 import * as React from 'react'
 import LuckDBClient, { LocalAuthStore } from '@easygrid/sdk'
-import { setLuckdbClient } from '@/config/client'
-import { setTestTableConfig } from '@/config/testTable'
-import ProductGridDemo from '@/components/demos/product-demo'
+import { setLuckdbClient } from "../config/client"
+import { setTestTableConfig } from "../config/testTable"
+import ProductGridDemo from "../components/demos/product-demo"
 
 export interface EasyGridProProps {
   client?: LuckDBClient

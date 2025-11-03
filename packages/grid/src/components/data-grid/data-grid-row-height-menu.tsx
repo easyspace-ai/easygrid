@@ -10,7 +10,7 @@
 
 import * as React from "react";
 import type { Table } from "@tanstack/react-table";
-import { Button } from "@/components/ui/button";
+import { Button } from "../ui/button";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -19,10 +19,10 @@ import {
   DropdownMenuRadioItem,
   DropdownMenuSeparator,
   DropdownMenuTrigger,
-} from "@/components/ui/dropdown-menu";
+} from "../ui/dropdown-menu";
 import { ArrowUpDown } from "lucide-react";
-import { cn } from "@/lib/utils";
-import type { RowHeightValue } from "@/types/data-grid";
+import { cn } from "../../lib/utils";
+import type { RowHeightValue } from "../../types/data-grid";
 
 interface DataGridRowHeightMenuProps<TData> {
   table: Table<TData>;

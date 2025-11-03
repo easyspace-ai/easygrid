@@ -11,18 +11,18 @@
 
 import * as React from "react";
 import type { Table } from "@tanstack/react-table";
-import { Button } from "@/components/ui/button";
+import { Button } from "../ui/button";
 import {
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuLabel,
   DropdownMenuSeparator,
   DropdownMenuTrigger,
-} from "@/components/ui/dropdown-menu";
-import { Input } from "@/components/ui/input";
-import { Checkbox } from "@/components/ui/checkbox";
+} from "../ui/dropdown-menu";
+import { Input } from "../ui/input";
+import { Checkbox } from "../ui/checkbox";
 import { Eye, Search } from "lucide-react";
-import { cn } from "@/lib/utils";
+import { cn } from "../../lib/utils";
 
 interface DataGridViewMenuProps<TData> {
   table: Table<TData>;

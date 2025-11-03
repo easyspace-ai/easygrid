@@ -2,13 +2,13 @@
 
 import { Plus } from "lucide-react";
 import * as React from "react";
-import { DraggableColumnHeaders } from "@/components/data-grid/data-grid-column-header";
-import { DataGridContextMenu } from "@/components/data-grid/data-grid-context-menu";
-import { DataGridRow } from "@/components/data-grid/data-grid-row";
-import { DataGridSearch } from "@/components/data-grid/data-grid-search";
-import { AddColumnMenu } from "@/components/data-grid/add-column-menu";
-import type { useDataGrid } from "@/hooks/use-data-grid";
-import { cn } from "@/lib/utils";
+import { DraggableColumnHeaders } from "./data-grid-column-header";
+import { DataGridContextMenu } from "./data-grid-context-menu";
+import { DataGridRow } from "./data-grid-row";
+import { DataGridSearch } from "./data-grid-search";
+import { AddColumnMenu } from "./add-column-menu";
+import type { useDataGrid } from "../../hooks/use-data-grid";
+import { cn } from "../../lib/utils";
 
 interface DataGridProps<TData>
   extends ReturnType<typeof useDataGrid<TData>>,
@@ -101,6 +101,9 @@ export function DataGrid<TData>({
 
   const handleAddColumnConfirm = React.useCallback(
     (payload: { type: string; name?: string; options?: any }) => {
+      try {
+        console.log('[DataGrid] handleAddColumnConfirm payload', payload);
+      } catch {}
       onAddColumn?.(payload);
       setIsAddColumnMenuOpen(false);
     },

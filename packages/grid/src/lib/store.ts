@@ -2,7 +2,7 @@
 
 import * as React from "react";
 
-import { useLazyRef } from "@/hooks/use-lazy-ref";
+import { useLazyRef } from "../hooks/use-lazy-ref";
 
 interface Store<T> {
   subscribe: (callback: () => void) => () => void;

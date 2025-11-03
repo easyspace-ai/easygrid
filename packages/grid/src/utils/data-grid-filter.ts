@@ -4,7 +4,7 @@
  * 根据筛选条件过滤数据
  */
 
-import type { FilterCondition, FilterOperator } from "@/components/data-grid/data-grid-filter-menu";
+import type { FilterCondition, FilterOperator } from "../components/data-grid/data-grid-filter-menu";
 
 export interface FilteredDataOptions<TData> {
   data: TData[];

@@ -10,13 +10,13 @@
 import * as React from "react";
 import type { Table } from "@tanstack/react-table";
 import { Plus } from "lucide-react";
-import { DataGridSortMenu } from "@/components/data-grid/data-grid-sort-menu";
-import { DataGridRowHeightMenu } from "@/components/data-grid/data-grid-row-height-menu";
-import { DataGridViewMenu } from "@/components/data-grid/data-grid-view-menu";
-import { DataGridFilterMenu } from "@/components/data-grid/data-grid-filter-menu";
-import type { FilterCondition } from "@/components/data-grid/data-grid-filter-menu";
-import { Button } from "@/components/ui/button";
-import { cn } from "@/lib/utils";
+import { DataGridSortMenu } from "./data-grid-sort-menu";
+import { DataGridRowHeightMenu } from "./data-grid-row-height-menu";
+import { DataGridViewMenu } from "./data-grid-view-menu";
+import { DataGridFilterMenu } from "./data-grid-filter-menu";
+import type { FilterCondition } from "./data-grid-filter-menu";
+import { Button } from "../ui/button";
+import { cn } from "../../lib/utils";
 
 interface DataGridToolbarProps<TData> {
   table: Table<TData>;

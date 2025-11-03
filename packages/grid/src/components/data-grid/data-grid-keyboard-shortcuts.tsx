@@ -2,7 +2,7 @@
 
 import { SearchIcon, XIcon } from "lucide-react";
 import * as React from "react";
-import { Button } from "@/components/ui/button";
+import { Button } from "../ui/button";
 import {
   Dialog,
   DialogClose,
@@ -10,10 +10,10 @@ import {
   DialogDescription,
   DialogHeader,
   DialogTitle,
-} from "@/components/ui/dialog";
-import { Input } from "@/components/ui/input";
-import { Kbd, KbdGroup } from "@/components/ui/kbd";
-import { Separator } from "@/components/ui/separator";
+} from "../ui/dialog";
+import { Input } from "../ui/input";
+import { Kbd, KbdGroup } from "../ui/kbd";
+import { Separator } from "../ui/separator";
 
 const SHORTCUT_KEY = "/";
 

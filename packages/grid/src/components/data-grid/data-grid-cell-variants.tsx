@@ -3,11 +3,11 @@
 import type { Cell, Table } from "@tanstack/react-table";
 import { Check, X, Link as LinkIcon, Mail, Phone, Star, User, Image as ImageIcon, ExternalLink, Plus, Code, Bot, Loader2, RefreshCw, AlertCircle } from "lucide-react";
 import * as React from "react";
-import { DataGridCellWrapper } from "@/components/data-grid/data-grid-cell-wrapper";
-import { useAIField } from "@/hooks/use-ai-field";
-import { Badge } from "@/components/ui/badge";
-import { Calendar } from "@/components/ui/calendar";
-import { Checkbox } from "@/components/ui/checkbox";
+import { DataGridCellWrapper } from "./data-grid-cell-wrapper";
+import { useAIField } from "../../hooks/use-ai-field";
+import { Badge } from "../ui/badge";
+import { Calendar } from "../ui/calendar";
+import { Checkbox } from "../ui/checkbox";
 import {
   Command,
   CommandEmpty,
@@ -16,24 +16,24 @@ import {
   CommandItem,
   CommandList,
   CommandSeparator,
-} from "@/components/ui/command";
+} from "../ui/command";
 import {
   Popover,
   PopoverAnchor,
   PopoverContent,
-} from "@/components/ui/popover";
+} from "../ui/popover";
 import {
   Select,
   SelectContent,
   SelectItem,
   SelectTrigger,
   SelectValue,
-} from "@/components/ui/select";
-import { Textarea } from "@/components/ui/textarea";
-import { useDebouncedCallback } from "@/hooks/use-debounced-callback";
-import { getLineCount } from "@/lib/data-grid";
-import { FileUploadDialog } from "@/components/data-grid/file-upload-dialog";
-import { cn } from "@/lib/utils";
+} from "../ui/select";
+import { Textarea } from "../ui/textarea";
+import { useDebouncedCallback } from "../../hooks/use-debounced-callback";
+import { getLineCount } from "../../lib/data-grid";
+import { FileUploadDialog } from "./file-upload-dialog";
+import { cn } from "../../lib/utils";
 
 interface CellVariantProps<TData> {
   cell: Cell<TData, unknown>;

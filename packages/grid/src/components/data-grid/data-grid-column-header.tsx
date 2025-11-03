@@ -19,7 +19,7 @@ import {
   ListIcon,
   PinIcon,
   PinOffIcon,
-  TextInitialIcon,
+  FileText as TextInitialIcon,
   XIcon,
   Plus,
   Link as LinkIcon,
@@ -64,17 +64,17 @@ import {
   DropdownMenuItem,
   DropdownMenuSeparator,
   DropdownMenuTrigger,
-} from "@/components/ui/dropdown-menu";
+} from "../ui/dropdown-menu";
 import {
   Tooltip,
   TooltipContent,
   TooltipTrigger,
-} from "@/components/ui/tooltip";
-import { cn } from "@/lib/utils";
-import { getCommonPinningStyles } from "@/lib/data-table";
-import type { Cell } from "@/types/data-grid";
-import { AddColumnMenu } from "@/components/data-grid/add-column-menu";
-import { mapCellVariantToFieldType } from "@/services/fieldMapper";
+} from "../ui/tooltip";
+import { cn } from "../../lib/utils";
+import { getCommonPinningStyles } from "../../lib/data-table";
+import type { Cell } from "../../types/data-grid";
+import { AddColumnMenu } from "./add-column-menu";
+import { mapCellVariantToFieldType } from "../../services/fieldMapper";
 
 function getColumnVariant(variant?: Cell["variant"]): { icon: LucideIcon; label: string } | null {
   switch (variant) {
@@ -331,7 +331,7 @@ export function DataGridColumnHeader<TData, TValue>({
         <div
           ref={headerContainerRef}
           className={cn(
-            "flex size-full items-center justify-between gap-2 p-2 text-sm hover:bg-accent/40 [&_svg]:size-4 cursor-grab active:cursor-grabbing h-full",
+            "relative flex size-full items-center justify-between gap-2 p-2 text-sm hover:bg-accent/40 [&_svg]:size-4 cursor-grab active:cursor-grabbing h-full",
             (isAnyColumnResizing || isAnyDragging) && "pointer-events-none",
             className,
           )}
@@ -579,6 +579,23 @@ function DataGridColumnResizerImpl<TData, TValue>({
     return header.getResizeHandler?.() || (() => {});
   };
 
+  const handlePointerDown = React.useCallback((e: React.PointerEvent) => {
+    // 如果正在拖动，阻止所有指针事件
+    if (globalIsDragging || isDragging || isAnyDragging) {
+      e.preventDefault();
+      e.stopPropagation();
+      return false;
+    }
+    // 调用原始的 resize handler（先调用，确保resize handler能正常工作）
+    const handler = header.getResizeHandler?.();
+    if (handler) {
+      handler(e.nativeEvent);
+    }
+    // 阻止事件冒泡到拖动监听器（但不过阻止默认行为，让 resize 能正常工作）
+    e.stopPropagation();
+    // 注意：不调用 e.preventDefault()，因为 TanStack Table 的 resize handler 需要默认行为
+  }, [isDragging, isAnyDragging, header]);
+
   const handleMouseDown = React.useCallback((e: React.MouseEvent) => {
     // 如果正在拖动，阻止所有鼠标事件
     if (globalIsDragging || isDragging || isAnyDragging) {
@@ -622,17 +639,23 @@ function DataGridColumnResizerImpl<TData, TValue>({
       tabIndex={isDragging ? -1 : 0}
       data-dragging={isDragging || isAnyDragging || globalIsDragging ? 'true' : 'false'}
       className={cn(
-        "after:-translate-x-1/2 -right-px absolute top-0 z-50 h-full w-0.5 cursor-ew-resize touch-none select-none bg-border transition-opacity after:absolute after:inset-y-0 after:left-1/2 after:h-full after:w-[18px] after:content-[''] focus:bg-primary focus:outline-none",
+        "absolute top-0 right-0 z-50 h-full w-0.5 cursor-ew-resize touch-none select-none transition-opacity",
+        "after:absolute after:inset-y-0 after:left-1/2 after:-translate-x-1/2 after:w-4 after:content-['']",
         isResizing()
-          ? "bg-primary opacity-100 pointer-events-auto"
+          ? "bg-primary opacity-100"
           : isDragging || isAnyDragging || globalIsDragging
-            ? "opacity-0 pointer-events-none cursor-default" // 拖动时完全隐藏并禁用交互
-            : "opacity-0 hover:bg-primary hover:opacity-100 pointer-events-auto", // 只有在非拖动状态下才显示 hover 效果
+            ? "opacity-0 pointer-events-none"
+            : "bg-border opacity-0 hover:opacity-100 hover:bg-primary",
       )}
       style={isDragging || isAnyDragging || globalIsDragging ? { display: 'none', pointerEvents: 'none' } : undefined}
       onDoubleClick={isDragging || isAnyDragging || globalIsDragging ? undefined : onDoubleClick}
+      onPointerDown={handlePointerDown}
       onMouseDown={handleMouseDown}
       onTouchStart={handleTouchStart}
+      onClick={(e) => {
+        // 防止点击事件冒泡到拖动监听器
+        e.stopPropagation();
+      }}
     />
   );
 }

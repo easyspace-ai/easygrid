@@ -1,17 +1,17 @@
 import * as React from 'react'
 import type { ColumnDef } from '@tanstack/react-table'
 import type LuckDBClient from '@easygrid/sdk'
-import { setLuckdbClient, luckdbClient } from '@/config/client'
-import { DataGrid } from '@/components/data-grid/data-grid'
-import { DataGridToolbar } from '@/components/data-grid/data-grid-toolbar'
-import { AddRecordDialog } from '@/components/data-grid/add-record-dialog'
-import { useDataGrid } from '@/hooks/use-data-grid'
-import type { FilterCondition } from '@/components/data-grid/data-grid-filter-menu'
-import { applyFilters } from '@/utils/data-grid-filter'
+import { setLuckdbClient, luckdbClient } from "../config/client"
+import { DataGrid } from "../components/data-grid/data-grid"
+import { DataGridToolbar } from "../components/data-grid/data-grid-toolbar"
+import { AddRecordDialog } from "../components/data-grid/add-record-dialog"
+import { useDataGrid } from "../hooks/use-data-grid"
+import type { FilterCondition } from "../components/data-grid/data-grid-filter-menu"
+import { applyFilters } from "../utils/data-grid-filter"
 import { toast } from 'sonner'
-import { mapFieldTypeToCellVariant, mapFieldOptionsToCellOptions } from '@/services/fieldMapper'
-import { buildCellType } from '@/services/cellTypeHelper'
-import { useShareDBSync } from '@/hooks/use-sharedb-sync'
+import { mapFieldTypeToCellVariant, mapFieldOptionsToCellOptions } from "../services/fieldMapper"
+import { buildCellType } from "../services/cellTypeHelper"
+import { useShareDBSync } from "../hooks/use-sharedb-sync"
 
 type Row = { id: string; [key: string]: unknown }
 

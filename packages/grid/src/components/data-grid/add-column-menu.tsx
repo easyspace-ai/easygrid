@@ -20,7 +20,7 @@ import {
   Code,
   Bot,
 } from 'lucide-react';
-import { cn } from '@/lib/utils';
+import { cn } from "../../lib/utils";
 
 /**
  * 字段类型分类
@@ -348,25 +348,29 @@ export function AddColumnMenu({
   // 打开时重置（修复再次打开仍停留在上次第二步的问题）
   // 编辑模式：如果有初始值，则使用初始值；否则重置
   useEffect(() => {
-    if (isOpen) {
-      if (initialType) {
-        // 编辑模式：使用初始值
-        setStep('configure');
-        setSelectedType(fieldTypes.find(t => t.id === initialType) || null);
-        setFieldName(initialName || '');
-        setFieldOptions(initialOptions || {});
-      } else {
-        // 添加模式：重置
-        setStep('select');
-        setSelectedType(null);
-        setFieldName('');
-        setFieldOptions({});
-      }
+    if (!isOpen) return;
+    // 避免在已进入 configure 时被不必要的依赖变化重置回 select
+    if (initialType) {
+      setStep('configure');
+      setSelectedType(fieldTypes.find(t => t.id === initialType) || null);
+      setFieldName(initialName || '');
+      setFieldOptions(initialOptions || {});
+      return;
     }
-  }, [isOpen, initialType, initialName, initialOptions]);
+    if (step !== 'configure') {
+      setStep('select');
+      setSelectedType(null);
+      setFieldName('');
+      setFieldOptions({});
+    }
+  }, [isOpen, initialType, initialName, initialOptions, step]);
 
   // 处理字段选择：若提供 onConfirm 则进入配置步骤，否则沿用仅选择
   const handleFieldSelect = (fieldType: string) => {
+    try {
+      // 调试：确认选择类型与是否存在 onConfirm
+      console.log('[AddColumnMenu] handleFieldSelect', { fieldType, hasOnConfirm: !!onConfirm, currentStep: step });
+    } catch {}
     const type = fieldTypes.find(t => t.id === fieldType) || null;
     setSelectedType(type);
     if (onConfirm) {
@@ -406,11 +410,13 @@ export function AddColumnMenu({
 
   return (
     <>
-      {/* 背景遮罩（不再变暗，保持透明，仅用于捕获点击关闭）*/}
-      <div
-        className="fixed inset-0 z-50 bg-transparent"
-        onClick={onClose}
-      />
+      {/* 背景遮罩：仅在配置步骤时允许点击关闭 */}
+      {step === 'configure' && (
+        <div
+          className="fixed inset-0 z-50 bg-transparent"
+          onClick={onClose}
+        />
+      )}
 
       {/* 菜单主体（两步式）*/}
       <div
@@ -426,6 +432,10 @@ export function AddColumnMenu({
           maxHeight: position.maxHeight,
         }}
         onKeyDown={handleKeyDown}
+        onMouseDown={(e) => {
+          // 防止点击在菜单内部时冒泡到遮罩导致菜单被关闭
+          e.stopPropagation();
+        }}
         tabIndex={-1}
       >
         {step === 'select' ? (
@@ -492,7 +502,10 @@ export function AddColumnMenu({
                 return (
                   <button
                     key={type.id}
-                    onClick={() => handleFieldSelect(type.id)}
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      handleFieldSelect(type.id);
+                    }}
                     className="flex items-center gap-2.5 rounded-md border-0 bg-transparent px-3 py-2 text-left transition-colors hover:bg-accent/50"
                   >
                     {/* 图标 */}
@@ -581,6 +594,9 @@ export function AddColumnMenu({
                     name: fieldName, 
                     options: fieldOptions 
                   };
+                  try {
+                    console.log('[AddColumnMenu] confirm create payload', payload);
+                  } catch {}
                   
                   onConfirm?.(payload);
                   onClose();

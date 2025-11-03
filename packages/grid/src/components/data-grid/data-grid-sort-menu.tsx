@@ -12,14 +12,14 @@
 
 import * as React from "react";
 import type { Table } from "@tanstack/react-table";
-import { Button } from "@/components/ui/button";
+import { Button } from "../ui/button";
 import {
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuLabel,
   DropdownMenuSeparator,
   DropdownMenuTrigger,
-} from "@/components/ui/dropdown-menu";
+} from "../ui/dropdown-menu";
 import {
   ArrowUpDown,
   ArrowUp,
@@ -27,7 +27,7 @@ import {
   X,
   GripVertical,
 } from "lucide-react";
-import { cn } from "@/lib/utils";
+import { cn } from "../../lib/utils";
 import {
   DndContext,
   closestCenter,
