@@ -177,3 +177,19 @@ const { table, dataGridRef, ... } = useDataGrid({
 ## 📄 许可证
 
 MIT License
+ 
+## 🔄 迁移指南（EasyGrid/EasyGridPro 合并）
+
+- 统一使用 `EasyGrid` 作为封装组件；`EasyGridPro` 仍可用，但仅作为兼容包装。
+- 属性变更：
+  - `server` → `serverUrl`
+  - `enableAddRecordDialog` → `allowCreateRecord`
+- 示例：
+
+```tsx
+// 旧
+<EasyGridPro server="http://localhost:8080" enableAddRecordDialog />
+
+// 新（推荐）
+<EasyGrid serverUrl="http://localhost:8080" allowCreateRecord />
+```

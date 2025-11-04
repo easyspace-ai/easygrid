@@ -1,4 +1,4 @@
-import DataGridDemo from "./components/demos/product-demo";
+// Demo removed
 import { Toaster } from "sonner";
 
 function App() {

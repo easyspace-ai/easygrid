@@ -170,6 +170,17 @@ export function DataGrid<TData>({
     if (wrapperRef.current) {
       resizeObserver.observe(wrapperRef.current);
     }
+
+    // 额外监听 footer 高度变化（初次渲染时可能为 0），变化后重新计算
+    const gridEl = dataGridRef.current as HTMLElement | null;
+    const footerEl = gridEl?.querySelector('[data-slot="grid-footer"]') as HTMLElement | null;
+    let footerResizeObserver: ResizeObserver | null = null;
+    if (footerEl) {
+      footerResizeObserver = new ResizeObserver(() => {
+        debouncedCalculateHeight();
+      });
+      footerResizeObserver.observe(footerEl);
+    }
     
     // 监听窗口 resize 事件，使用防抖
     const handleWindowResize = () => {
@@ -186,6 +197,9 @@ export function DataGrid<TData>({
         cancelAnimationFrame(rafId);
       }
       resizeObserver.disconnect();
+      if (footerResizeObserver) {
+        footerResizeObserver.disconnect();
+      }
       window.removeEventListener('resize', handleWindowResize);
     };
   }, [height]);
