@@ -3,6 +3,7 @@ import LuckDBClient, { LocalAuthStore } from '@easygrid/sdk'
 import { setLuckdbClient } from "../config/client"
 import { setTestTableConfig } from "../config/testTable"
 import ProductGridDemo from "../components/demos/product-demo"
+import { cn } from "../lib/utils"
 
 export interface EasyGridProProps {
   client?: LuckDBClient
@@ -18,7 +19,7 @@ export interface EasyGridProProps {
 }
 
 export default function EasyGridPro(props: EasyGridProProps) {
-  const { client, server, locale = 'zh-CN', authStore, tableId, spaceId, baseId, height, showShareDBBadge, enableAddRecordDialog } = props
+  const { client, server, locale = 'zh-CN', authStore, tableId, spaceId, baseId, height = 'auto', showShareDBBadge, enableAddRecordDialog } = props
 
   React.useEffect(() => {
     if (client) {
@@ -42,11 +43,13 @@ export default function EasyGridPro(props: EasyGridProProps) {
   }, [tableId, spaceId, baseId])
 
   return (
-    <ProductGridDemo
-      height={height}
-      showShareDBBadge={showShareDBBadge}
-      enableAddRecordDialog={enableAddRecordDialog}
-    />
+    <div className={cn(height === 'auto' && "h-full flex flex-col flex-1 min-h-0")}>
+      <ProductGridDemo
+        height={height}
+        showShareDBBadge={showShareDBBadge}
+        enableAddRecordDialog={enableAddRecordDialog}
+      />
+    </div>
   )
 }
 

@@ -1219,7 +1219,7 @@ export default function DataGridDemo(props: ProductGridDemoProps = {}) {
           onSubmit={handleAddRecord}
         />
       )}
-      <div className={cn("flex flex-col rounded-md border", height === 'auto' ? "h-full" : "")}>
+      <div className={cn("flex flex-col rounded-md border", height === 'auto' ? "h-full flex-1 min-h-0" : "")}>
         <div className="flex items-center justify-between border-b bg-background px-4 py-2 gap-4 shrink-0" data-testid="toolbar-container">
           <div className="flex-1">
             <DataGridToolbar

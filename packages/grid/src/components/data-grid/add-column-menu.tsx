@@ -289,6 +289,7 @@ export function AddColumnMenu({
   const [fieldOptions, setFieldOptions] = useState<any>(initialOptions || {});
   const menuRef = useRef<HTMLDivElement>(null);
   const [position, setPosition] = useState({ top: 0, left: 0, maxHeight: 400 });
+  const isUserInitiatedStepChange = useRef(false);
 
   // 筛选后的字段类型
   const filteredFieldTypes = useMemo(() => {
@@ -348,22 +349,30 @@ export function AddColumnMenu({
   // 打开时重置（修复再次打开仍停留在上次第二步的问题）
   // 编辑模式：如果有初始值，则使用初始值；否则重置
   useEffect(() => {
-    if (!isOpen) return;
-    // 避免在已进入 configure 时被不必要的依赖变化重置回 select
+    if (!isOpen) {
+      // 菜单关闭时，重置用户切换标志
+      isUserInitiatedStepChange.current = false;
+      return;
+    }
+    
+    // 如果用户主动切换了步骤，不进行重置
+    if (isUserInitiatedStepChange.current) {
+      return;
+    }
+    
+    // 只在菜单首次打开时重置
     if (initialType) {
       setStep('configure');
       setSelectedType(fieldTypes.find(t => t.id === initialType) || null);
       setFieldName(initialName || '');
       setFieldOptions(initialOptions || {});
-      return;
-    }
-    if (step !== 'configure') {
+    } else {
       setStep('select');
       setSelectedType(null);
       setFieldName('');
       setFieldOptions({});
     }
-  }, [isOpen, initialType, initialName, initialOptions, step]);
+  }, [isOpen, initialType, initialName, initialOptions]);
 
   // 处理字段选择：若提供 onConfirm 则进入配置步骤，否则沿用仅选择
   const handleFieldSelect = (fieldType: string) => {
@@ -389,6 +398,7 @@ export function AddColumnMenu({
       } else {
         setFieldOptions({});
       }
+      isUserInitiatedStepChange.current = false;
       setStep('configure');
     } else {
       onSelect?.(fieldType);
@@ -409,21 +419,31 @@ export function AddColumnMenu({
 
     const handleClickOutside = (event: MouseEvent) => {
       const target = event.target as Node;
+      
       // 如果点击在菜单内，不关闭
       if (menuRef.current && menuRef.current.contains(target)) {
         return;
       }
+      
+      // 检查是否是触发元素（避免点击触发元素时关闭）
+      if (triggerRef?.current && triggerRef.current.contains(target)) {
+        return;
+      }
+      
       // 点击在菜单外，关闭
       onClose();
     };
 
-    // 使用冒泡阶段监听
-    document.addEventListener('mousedown', handleClickOutside);
+    // 使用 mousedown 事件监听，但添加短暂延迟以避免步骤切换时的误判
+    const timeoutId = setTimeout(() => {
+      document.addEventListener('mousedown', handleClickOutside, true);
+    }, 0);
 
     return () => {
-      document.removeEventListener('mousedown', handleClickOutside);
+      clearTimeout(timeoutId);
+      document.removeEventListener('mousedown', handleClickOutside, true);
     };
-  }, [isOpen, step, onClose]);
+  }, [isOpen, step, onClose, triggerRef]);
 
   if (!isOpen) return null;
 
@@ -564,7 +584,13 @@ export function AddColumnMenu({
               <div className="flex items-center gap-1.5 text-xs text-muted-foreground">
                 <span className="rounded border border-border bg-muted px-2 py-1">{selectedType?.name}</span>
                 <button 
-                  onClick={() => setStep('select')}
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    e.preventDefault();
+                    isUserInitiatedStepChange.current = true;
+                    setStep('select');
+                  }}
+                  onMouseDown={(e) => e.stopPropagation()}
                   className="ml-auto cursor-pointer bg-transparent border-0 text-xs text-primary hover:underline"
                 >
                   更改类型

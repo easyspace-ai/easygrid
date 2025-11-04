@@ -40,6 +40,9 @@ export function DataGrid<TData>({
   const rows = table.getRowModel().rows;
   const columns = table.getAllColumns();
   
+  // 创建 wrapper ref 用于监听父容器尺寸变化
+  const wrapperRef = React.useRef<HTMLDivElement>(null);
+  
   // 当 height 为 'auto' 时，需要动态计算可用高度
   const [calculatedHeight, setCalculatedHeight] = React.useState<number | undefined>(
     height === 'auto' ? undefined : height
@@ -52,38 +55,138 @@ export function DataGrid<TData>({
       return;
     }
     
+    let rafId: number | null = null;
+    let resizeTimeout: NodeJS.Timeout | null = null;
+    let isInitialized = false;
+    let lastHeight = 0;
+    let lastWrapperHeight = 0;
+    let lastWrapperWidth = 0;
+    
     const calculateHeight = () => {
-      if (!dataGridRef.current) return;
-      const container = dataGridRef.current;
-      const header = container.querySelector('[data-slot="grid-header"]') as HTMLElement;
-      const footer = container.querySelector('[data-slot="grid-footer"]') as HTMLElement;
+      // 只使用 wrapper 的尺寸，不监听 grid 容器本身（避免滚动时触发）
+      if (!wrapperRef.current) return;
       
-      if (header && container.clientHeight > 0) {
-        const containerHeight = container.clientHeight;
-        const headerHeight = header.offsetHeight;
-        const footerHeight = footer?.offsetHeight || 0;
-        const availableHeight = containerHeight - headerHeight - footerHeight;
-        setCalculatedHeight(Math.max(400, availableHeight));
+      const grid = dataGridRef.current;
+      if (!grid) return;
+      
+      const header = grid.querySelector('[data-slot="grid-header"]') as HTMLElement;
+      const footer = grid.querySelector('[data-slot="grid-footer"]') as HTMLElement;
+      
+      if (!header) return;
+      
+      // 使用 wrapper 的可用高度，减去 header 和 footer
+      const wrapperHeight = wrapperRef.current.clientHeight;
+      
+      // 如果 wrapper 高度为 0 或未初始化，跳过计算
+      if (wrapperHeight <= 0) return;
+      
+      // 更新 wrapper 尺寸记录
+      lastWrapperHeight = wrapperHeight;
+      lastWrapperWidth = wrapperRef.current.clientWidth;
+      
+      const headerHeight = header.offsetHeight;
+      const footerHeight = footer?.offsetHeight || 0;
+      const availableHeight = wrapperHeight - headerHeight - footerHeight;
+      
+      // 只在高度确实变化时才更新，避免不必要的重渲染
+      const newHeight = Math.max(400, availableHeight);
+      
+      // 如果高度变化小于 2px，忽略更新（避免滚动条出现/消失导致的微小变化）
+      if (isInitialized && Math.abs(lastHeight - newHeight) < 2) {
+        return;
       }
+      
+      lastHeight = newHeight;
+      isInitialized = true;
+      
+      setCalculatedHeight((prev) => {
+        // 如果高度变化小于 2px，忽略更新
+        if (prev !== undefined && Math.abs(prev - newHeight) < 2) {
+          return prev;
+        }
+        return newHeight;
+      });
     };
     
-    // 延迟计算，确保 DOM 已渲染
-    const timeoutId = setTimeout(() => {
-      calculateHeight();
-    }, 0);
+    // 防抖的高度计算函数
+    const debouncedCalculateHeight = () => {
+      if (resizeTimeout) {
+        clearTimeout(resizeTimeout);
+      }
+      resizeTimeout = setTimeout(() => {
+        if (rafId) {
+          cancelAnimationFrame(rafId);
+        }
+        rafId = requestAnimationFrame(() => {
+          calculateHeight();
+        });
+      }, 150);
+    };
     
-    // 使用 ResizeObserver 监听容器尺寸变化
-    const resizeObserver = new ResizeObserver(() => {
-      calculateHeight();
+    // 等待 DOM 完全渲染后再开始计算，使用稳定的延迟
+    let initTimeout: NodeJS.Timeout;
+    let initAttempts = 0;
+    const maxInitAttempts = 3;
+    
+    const initialize = () => {
+      initTimeout = setTimeout(() => {
+        // 检查 wrapper 是否有有效高度
+        if (wrapperRef.current && wrapperRef.current.clientHeight > 0) {
+          calculateHeight();
+          initAttempts = maxInitAttempts; // 如果成功，停止重试
+        } else if (initAttempts < maxInitAttempts) {
+          initAttempts++;
+          initialize(); // 重试
+        }
+      }, initAttempts === 0 ? 100 : 150); // 第一次延迟稍短，后续更长
+    };
+    
+    initialize();
+    
+    // 使用 ResizeObserver 只监听 wrapper 容器，不监听 grid 本身
+    const resizeObserver = new ResizeObserver((entries) => {
+      // 只响应 wrapper 的尺寸变化，忽略其他变化
+      for (const entry of entries) {
+        if (entry.target === wrapperRef.current) {
+          const { width, height } = entry.contentRect;
+          // 只有当尺寸真正变化时才触发计算（避免循环更新）
+          if (width > 0 && height > 0) {
+            // 检查是否是外部尺寸变化（不是我们自己的高度更新导致的）
+            const widthChanged = Math.abs(width - lastWrapperWidth) >= 1;
+            const heightChanged = Math.abs(height - lastWrapperHeight) >= 1;
+            
+            if (widthChanged || heightChanged) {
+              lastWrapperWidth = width;
+              lastWrapperHeight = height;
+              debouncedCalculateHeight();
+            }
+          }
+          break;
+        }
+      }
     });
     
-    if (dataGridRef.current) {
-      resizeObserver.observe(dataGridRef.current);
+    // 只监听 wrapper 容器
+    if (wrapperRef.current) {
+      resizeObserver.observe(wrapperRef.current);
     }
     
+    // 监听窗口 resize 事件，使用防抖
+    const handleWindowResize = () => {
+      debouncedCalculateHeight();
+    };
+    window.addEventListener('resize', handleWindowResize);
+    
     return () => {
-      clearTimeout(timeoutId);
+      clearTimeout(initTimeout);
+      if (resizeTimeout) {
+        clearTimeout(resizeTimeout);
+      }
+      if (rafId) {
+        cancelAnimationFrame(rafId);
+      }
       resizeObserver.disconnect();
+      window.removeEventListener('resize', handleWindowResize);
     };
   }, [height]);
   
@@ -167,8 +270,9 @@ export function DataGrid<TData>({
 
   return (
     <div
+      ref={wrapperRef}
       data-slot="grid-wrapper"
-      className={cn("relative flex w-full flex-col", className)}
+      className={cn("relative flex w-full flex-col", height === 'auto' ? "h-full" : "", className)}
       {...props}
     >
       {searchState && <DataGridSearch {...searchState} />}
