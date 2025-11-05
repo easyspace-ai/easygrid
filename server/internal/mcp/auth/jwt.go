@@ -7,8 +7,9 @@ import (
 	"fmt"
 	"time"
 
-	"github.com/easyspace-ai/luckdb/server/internal/mcp/protocol"
 	"github.com/golang-jwt/jwt/v5"
+
+	mcperrors "github.com/easyspace-ai/luckdb/server/internal/mcp"
 )
 
 // JWTService JWT 服务
@@ -74,13 +75,13 @@ func (s *JWTService) ValidateToken(tokenString string) (*MCPClaims, error) {
 	})
 
 	if err != nil {
-		return nil, protocol.NewAuthenticationFailedError("Invalid token")
+		return nil, mcperrors.NewAuthenticationFailedError("Invalid token")
 	}
 
 	if claims, ok := token.Claims.(*MCPClaims); ok && token.Valid {
 		// 验证发行者和受众
 		if claims.Issuer != s.config.Issuer {
-			return nil, protocol.NewAuthenticationFailedError("Invalid token issuer")
+			return nil, mcperrors.NewAuthenticationFailedError("Invalid token issuer")
 		}
 
 		// 检查受众
@@ -92,13 +93,13 @@ func (s *JWTService) ValidateToken(tokenString string) (*MCPClaims, error) {
 			}
 		}
 		if !validAudience {
-			return nil, protocol.NewAuthenticationFailedError("Invalid token audience")
+			return nil, mcperrors.NewAuthenticationFailedError("Invalid token audience")
 		}
 
 		return claims, nil
 	}
 
-	return nil, protocol.NewAuthenticationFailedError("Invalid token")
+	return nil, mcperrors.NewAuthenticationFailedError("Invalid token")
 }
 
 // RefreshToken 刷新令牌结构
@@ -146,17 +147,17 @@ func (s *JWTService) RefreshAccessToken(ctx context.Context, refreshTokenRepo Re
 	// 验证刷新令牌
 	refreshToken, err := refreshTokenRepo.GetByToken(ctx, refreshTokenString)
 	if err != nil {
-		return "", nil, protocol.NewAuthenticationFailedError("Invalid refresh token")
+		return "", nil, mcperrors.NewAuthenticationFailedError("Invalid refresh token")
 	}
 
 	// 检查是否激活
 	if !refreshToken.IsActive {
-		return "", nil, protocol.NewAuthenticationFailedError("Refresh token is inactive")
+		return "", nil, mcperrors.NewAuthenticationFailedError("Refresh token is inactive")
 	}
 
 	// 检查是否过期
 	if refreshToken.ExpiresAt.Before(time.Now()) {
-		return "", nil, protocol.NewAuthenticationFailedError("Refresh token has expired")
+		return "", nil, mcperrors.NewAuthenticationFailedError("Refresh token has expired")
 	}
 
 	// 生成新的访问令牌
@@ -189,7 +190,7 @@ func (s *JWTService) RefreshAccessToken(ctx context.Context, refreshTokenRepo Re
 func (s *JWTService) RevokeRefreshToken(ctx context.Context, refreshTokenRepo RefreshTokenRepository, refreshTokenString string) error {
 	refreshToken, err := refreshTokenRepo.GetByToken(ctx, refreshTokenString)
 	if err != nil {
-		return protocol.NewAuthenticationFailedError("Invalid refresh token")
+		return mcperrors.NewAuthenticationFailedError("Invalid refresh token")
 	}
 
 	return refreshTokenRepo.Delete(ctx, refreshToken.ID)

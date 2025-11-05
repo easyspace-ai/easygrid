@@ -53,7 +53,7 @@ func DefaultSecurityConfig() SecurityConfig {
 	return SecurityConfig{
 		AllowOrigins:     []string{"*"},
 		AllowMethods:     []string{"GET", "POST", "PUT", "DELETE", "OPTIONS", "PATCH"},
-		AllowHeaders:     []string{"Origin", "Content-Type", "Accept", "Authorization", "X-Requested-With", "API-Version"},
+		AllowHeaders:     []string{"Origin", "Content-Type", "Accept", "Authorization", "X-Requested-With", "API-Version", "X-MCP-API-Key"},
 		ExposeHeaders:    []string{"API-Version", "API-Current-Version", "API-Deprecated"},
 		AllowCredentials: true,
 		MaxAge:           12 * time.Hour,

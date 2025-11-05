@@ -104,7 +104,7 @@ export function BaseCard({ base, onClick, onEdit, onDelete }: BaseCardProps) {
                   )}
                 </div>
 
-                {/* 更多操作 - 悬浮时显示 */}
+                {/* 更多操作（三点） - 悬浮时显示，左键可打开菜单 */}
                 <div
                   className={cn(
                     'transition-all duration-150',
@@ -118,9 +118,14 @@ export function BaseCard({ base, onClick, onEdit, onDelete }: BaseCardProps) {
                     <DropdownMenuTrigger asChild>
                       <button
                         type="button"
-                        className="absolute inset-0 opacity-0 pointer-events-none"
-                        aria-label="右键菜单"
-                      />
+                        className="p-1 rounded hover:bg-muted"
+                        aria-label="更多操作"
+                        onClick={(e) => {
+                          e.stopPropagation()
+                        }}
+                      >
+                        <MoreHorizontal className="h-4 w-4 text-muted-foreground" />
+                      </button>
                     </DropdownMenuTrigger>
                     <DropdownMenuContent align="end" className="w-44">
                       <DropdownMenuItem

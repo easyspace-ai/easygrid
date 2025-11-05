@@ -52,8 +52,9 @@ export function NavUser() {
         <DropdownMenu>
           <DropdownMenuTrigger asChild>
             <SidebarMenuButton
+              type="button"
               size="lg"
-              className="data-[state=open]:bg-sidebar-accent data-[state=open]:text-sidebar-accent-foreground cursor-pointer"
+              className="data-[state=open]:bg-sidebar-accent data-[state=open]:text-sidebar-accent-foreground cursor-pointer relative z-10"
             >
               <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-primary/10">
                 <CircleUser size={20} className="text-primary" />
@@ -68,7 +69,7 @@ export function NavUser() {
             </SidebarMenuButton>
           </DropdownMenuTrigger>
           <DropdownMenuContent
-            className="w-(--radix-dropdown-menu-trigger-width) min-w-56 rounded-lg"
+            className="w-[--radix-dropdown-menu-trigger-width] min-w-56 rounded-lg z-[100]"
             side={isMobile ? "bottom" : "right"}
             align="end"
             sideOffset={4}

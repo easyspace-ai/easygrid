@@ -21,6 +21,13 @@ import {
   DialogTrigger,
 } from '@/components/ui/dialog'
 import {
+  ContextMenu,
+  ContextMenuContent,
+  ContextMenuItem,
+  ContextMenuSeparator,
+  ContextMenuTrigger,
+} from '@/components/ui/context-menu'
+import {
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuItem,
@@ -80,6 +87,7 @@ export function DatabaseSidebar({
   const [hoveredViewId, setHoveredViewId] = useState<string | null>(null)
   const [openMenuId, setOpenMenuId] = useState<string | null>(null)
   const rightClickRefMap = useRef<Map<string, boolean>>(new Map())
+  
 
   // 过滤表格和视图
   const filteredTables = useMemo(() => {
@@ -280,36 +288,18 @@ export function DatabaseSidebar({
             ) : (
               <div className="space-y-0.5">
                 {filteredTables.map((table) => (
-                  <div
-                    key={table.id}
-                    className={cn(
-                      'group relative flex items-center gap-2 p-1.5 rounded-md transition-all duration-150',
-                      'hover:bg-muted/70 hover:shadow-sm',
-                      selectedTableId === table.id && 'bg-primary/10 text-primary shadow-sm border border-primary/20'
-                    )}
-                    onMouseEnter={() => setHoveredTableId(table.id)}
-                    onMouseLeave={() => setHoveredTableId(null)}
-                    onMouseDown={(e) => {
-                      // 右键点击
-                      if (e.button === 2) {
-                        e.preventDefault()
-                        e.stopPropagation()
-                        rightClickRefMap.current.set(table.id, true)
-                        setOpenMenuId(table.id)
-                        // 延迟重置标志，防止后续的 click 事件触发
-                        setTimeout(() => {
-                          rightClickRefMap.current.set(table.id, false)
-                        }, 300)
-                      } else {
-                        rightClickRefMap.current.set(table.id, false)
-                      }
-                    }}
-                    onContextMenu={(e) => {
-                      e.preventDefault()
-                      e.stopPropagation()
-                    }}
-                  >
-                    <div 
+                  <ContextMenu key={table.id}>
+                    <ContextMenuTrigger asChild>
+                      <div
+                        className={cn(
+                          'group relative flex items-center gap-2 p-1.5 rounded-md transition-all duration-150',
+                          'hover:bg-muted/70 hover:shadow-sm',
+                          selectedTableId === table.id && 'bg-primary/10 text-primary shadow-sm border border-primary/20'
+                        )}
+                        onMouseEnter={() => setHoveredTableId(table.id)}
+                        onMouseLeave={() => setHoveredTableId(null)}
+                      >
+                        <div 
                       className="flex items-center gap-2 flex-1 min-w-0 overflow-hidden cursor-pointer"
                       onClick={(e) => {
                         // 如果标志位为 true 或菜单已打开，说明是右键触发的，不执行点击操作
@@ -321,58 +311,53 @@ export function DatabaseSidebar({
                         onTableSelect(table)
                       }}
                     >
-                      <Table className={cn(
-                        "h-3.5 w-3.5 flex-shrink-0 transition-colors",
-                        selectedTableId === table.id ? "text-primary" : "text-muted-foreground"
-                      )} />
-                      <span className={cn(
-                        "font-medium text-xs truncate flex-1 min-w-0",
-                        selectedTableId === table.id && "text-primary font-semibold"
-                      )} title={table.name}>
+                      <Table 
+                        className={cn(
+                          "h-3.5 w-3.5 flex-shrink-0 transition-colors",
+                          selectedTableId === table.id ? "text-primary" : "text-muted-foreground"
+                        )}
+                      />
+                      <span 
+                        className={cn(
+                          "font-medium text-xs truncate flex-1 min-w-0",
+                          selectedTableId === table.id && "text-primary font-semibold"
+                        )} 
+                        title={table.name}
+                      >
                         {table.name}
                       </span>
                     </div>
                     
-                    {/* 右键菜单图标提示 */}
-                    <div className="flex-shrink-0">
-                      <MoreHorizontal className="h-3.5 w-3.5 text-muted-foreground opacity-50" />
-                    </div>
-                    
-                    {/* 右键菜单 */}
-                    <DropdownMenu 
+                    {/* 右键菜单图标提示（左键点击也可打开菜单） */}
+                    <DropdownMenu
                       open={openMenuId === table.id}
                       onOpenChange={(open) => setOpenMenuId(open ? table.id : null)}
                     >
                       <DropdownMenuTrigger asChild>
                         <button
                           type="button"
-                          className="absolute inset-0 opacity-0 pointer-events-none"
-                          data-menu-trigger
-                          aria-label="右键菜单"
-                        />
+                          className="flex-shrink-0 p-1 rounded hover:bg-muted"
+                          onClick={(e) => e.stopPropagation()}
+                          aria-label="更多操作"
+                        >
+                          <MoreHorizontal className="h-3.5 w-3.5 text-muted-foreground" />
+                        </button>
                       </DropdownMenuTrigger>
-                      <DropdownMenuContent 
-                        align="end" 
-                        className="w-48"
-                        sideOffset={4}
-                      >
+                      <DropdownMenuContent align="end" className="w-48">
                         <DropdownMenuItem
                           onClick={async (e) => {
                             e.stopPropagation()
                             const newName = window.prompt('重命名为：', table.name)
                             if (!newName || !newName.trim() || newName.trim() === table.name) return
                             try {
-                              // 尝试使用 updateTable API
                               const updated = await (luckdb.tables as any).updateTable(table.id, { 
                                 name: newName.trim() 
                               })
-                              // 如果有 onTableUpdate 回调，使用它更新状态
                               if (onTableUpdate) {
                                 onTableUpdate(table.id, { name: newName.trim() } as any)
                               }
                               toast.success('重命名成功')
                             } catch (err: any) {
-                              // 如果 updateTable 不存在，尝试使用 renameTable
                               try {
                                 const updated = await (luckdb.tables as any).renameTable(table.id, { 
                                   name: newName.trim() 
@@ -446,7 +431,104 @@ export function DatabaseSidebar({
                         </DropdownMenuItem>
                       </DropdownMenuContent>
                     </DropdownMenu>
-                  </div>
+                    </div>
+                    </ContextMenuTrigger>
+                    {/* 右键菜单 */}
+                      <ContextMenuContent
+                        align="end"
+                        className="w-48"
+                        sideOffset={4}
+                      >
+                        <ContextMenuItem
+                          onClick={async (e) => {
+                            e.stopPropagation()
+                            const newName = window.prompt('重命名为：', table.name)
+                            if (!newName || !newName.trim() || newName.trim() === table.name) return
+                            try {
+                              // 尝试使用 updateTable API
+                              const updated = await (luckdb.tables as any).updateTable(table.id, { 
+                                name: newName.trim() 
+                              })
+                              // 如果有 onTableUpdate 回调，使用它更新状态
+                              if (onTableUpdate) {
+                                onTableUpdate(table.id, { name: newName.trim() } as any)
+                              }
+                              toast.success('重命名成功')
+                            } catch (err: any) {
+                              // 如果 updateTable 不存在，尝试使用 renameTable
+                              try {
+                                const updated = await (luckdb.tables as any).renameTable(table.id, { 
+                                  name: newName.trim() 
+                                })
+                                if (onTableUpdate) {
+                                  onTableUpdate(table.id, { name: newName.trim() } as any)
+                                }
+                                toast.success('重命名成功')
+                              } catch (err2: any) {
+                                console.error('重命名失败:', err2)
+                                toast.error(err2?.message || '重命名失败')
+                              }
+                            }
+                          }}
+                        >
+                          <Pencil className="h-4 w-4 mr-2" />
+                          重命名
+                        </ContextMenuItem>
+                        <ContextMenuSeparator />
+                        <ContextMenuItem
+                          onClick={async (e) => {
+                            e.stopPropagation()
+                            try {
+                              const usage = await luckdb.tables.getTableUsage(table.id)
+                              const percent = (usage.usagePercentage || 0).toFixed(2)
+                              toast.info(`数据表用量：${percent}% (记录 ${usage.recordCount}/${usage.maxRecords})`)
+                            } catch (err: any) {
+                              toast.error(err?.message || '获取用量失败')
+                            }
+                          }}
+                        >
+                          <Database className="h-4 w-4 mr-2" />
+                          数据表用量
+                        </ContextMenuItem>
+                        <ContextMenuItem
+                          onClick={async (e) => {
+                            e.stopPropagation()
+                            try {
+                              const duplicated = await luckdb.tables.duplicateTable(table.id, {
+                                name: `${table.name} (副本)`,
+                                withData: true,
+                                withViews: true,
+                                withFields: true
+                              })
+                              toast.success('复制成功')
+                              window.location.reload()
+                            } catch (err: any) {
+                              toast.error(err?.message || '复制失败')
+                            }
+                          }}
+                        >
+                          <Copy className="h-4 w-4 mr-2" />
+                          复制数据表
+                        </ContextMenuItem>
+                        <ContextMenuSeparator />
+                        <ContextMenuItem
+                          className="text-destructive focus:text-destructive"
+                          onClick={async (e) => {
+                            e.stopPropagation()
+                            if (!window.confirm('确定删除该数据表？此操作不可撤销。')) return
+                            try {
+                              await onTableDelete(table.id)
+                              toast.success('删除成功')
+                            } catch (err: any) {
+                              toast.error(err?.message || '删除失败')
+                            }
+                          }}
+                        >
+                          <Trash2 className="h-4 w-4 mr-2" />
+                          删除数据表
+                        </ContextMenuItem>
+                      </ContextMenuContent>
+                    </ContextMenu>
                 ))}
               </div>
             )}

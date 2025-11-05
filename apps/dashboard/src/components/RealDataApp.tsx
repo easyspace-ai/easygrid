@@ -5,7 +5,7 @@
  */
 
 import React, { useMemo, useRef, useEffect } from "react";
-import { EasyGridPro } from "@easygrid/grid";
+import { EasyGrid } from "@easygrid/grid";
 import { ZustandAuthStore } from "@/lib/zustand-auth-store";
 import { useAuthStore } from "@/stores/auth-store";
 

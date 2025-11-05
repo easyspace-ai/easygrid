@@ -5,8 +5,9 @@ import (
 	"strings"
 	"time"
 
-	"github.com/easyspace-ai/luckdb/server/internal/mcp/protocol"
 	"github.com/gin-gonic/gin"
+
+	mcperrors "github.com/easyspace-ai/luckdb/server/internal/mcp"
 )
 
 // AuthContext 认证上下文
@@ -32,7 +33,13 @@ func APIKeyAuthMiddleware(apiKeyService *APIKeyService, config *APIKeyConfig) gi
 		// 从请求头获取 API Key
 		keyString := c.GetHeader(config.Header)
 		if keyString == "" {
-			c.JSON(http.StatusUnauthorized, protocol.NewMCPErrorResponse(nil, protocol.ErrorCodeAuthenticationFailed, "API key is required", nil))
+			c.JSON(http.StatusUnauthorized, gin.H{
+				"jsonrpc": "2.0",
+				"error": gin.H{
+					"code":    mcperrors.ErrorCodeAuthenticationFailed,
+					"message": "API key is required",
+				},
+			})
 			c.Abort()
 			return
 		}
@@ -40,7 +47,13 @@ func APIKeyAuthMiddleware(apiKeyService *APIKeyService, config *APIKeyConfig) gi
 		// 验证 API Key
 		apiKey, err := apiKeyService.ValidateAPIKey(c.Request.Context(), keyString)
 		if err != nil {
-			c.JSON(http.StatusUnauthorized, protocol.NewMCPErrorResponse(nil, protocol.ErrorCodeAuthenticationFailed, "Invalid API key", nil))
+			c.JSON(http.StatusUnauthorized, gin.H{
+				"jsonrpc": "2.0",
+				"error": gin.H{
+					"code":    mcperrors.ErrorCodeAuthenticationFailed,
+					"message": "Invalid API key",
+				},
+			})
 			c.Abort()
 			return
 		}
@@ -74,14 +87,26 @@ func JWTAuthMiddleware(jwtService *JWTService, config *JWTConfig) gin.HandlerFun
 		// 从请求头获取 JWT Token
 		authHeader := c.GetHeader(config.Header)
 		if authHeader == "" {
-			c.JSON(http.StatusUnauthorized, protocol.NewMCPErrorResponse(nil, protocol.ErrorCodeAuthenticationFailed, "Authorization header is required", nil))
+			c.JSON(http.StatusUnauthorized, gin.H{
+				"jsonrpc": "2.0",
+				"error": gin.H{
+					"code":    mcperrors.ErrorCodeAuthenticationFailed,
+					"message": "Authorization header is required",
+				},
+			})
 			c.Abort()
 			return
 		}
 
 		// 检查 Bearer 前缀
 		if !strings.HasPrefix(authHeader, config.Prefix) {
-			c.JSON(http.StatusUnauthorized, protocol.NewMCPErrorResponse(nil, protocol.ErrorCodeAuthenticationFailed, "Invalid authorization header format", nil))
+			c.JSON(http.StatusUnauthorized, gin.H{
+				"jsonrpc": "2.0",
+				"error": gin.H{
+					"code":    mcperrors.ErrorCodeAuthenticationFailed,
+					"message": "Invalid authorization header format",
+				},
+			})
 			c.Abort()
 			return
 		}
@@ -89,7 +114,13 @@ func JWTAuthMiddleware(jwtService *JWTService, config *JWTConfig) gin.HandlerFun
 		// 提取 Token
 		token := strings.TrimPrefix(authHeader, config.Prefix)
 		if token == "" {
-			c.JSON(http.StatusUnauthorized, protocol.NewMCPErrorResponse(nil, protocol.ErrorCodeAuthenticationFailed, "Token is required", nil))
+			c.JSON(http.StatusUnauthorized, gin.H{
+				"jsonrpc": "2.0",
+				"error": gin.H{
+					"code":    mcperrors.ErrorCodeAuthenticationFailed,
+					"message": "Token is required",
+				},
+			})
 			c.Abort()
 			return
 		}
@@ -97,7 +128,13 @@ func JWTAuthMiddleware(jwtService *JWTService, config *JWTConfig) gin.HandlerFun
 		// 验证 JWT Token
 		claims, err := jwtService.ValidateToken(token)
 		if err != nil {
-			c.JSON(http.StatusUnauthorized, protocol.NewMCPErrorResponse(nil, protocol.ErrorCodeAuthenticationFailed, "Invalid token", nil))
+			c.JSON(http.StatusUnauthorized, gin.H{
+				"jsonrpc": "2.0",
+				"error": gin.H{
+					"code":    mcperrors.ErrorCodeAuthenticationFailed,
+					"message": "Invalid token",
+				},
+			})
 			c.Abort()
 			return
 		}
@@ -130,7 +167,13 @@ func SessionAuthMiddleware(sessionService *SessionService, config *SessionConfig
 		// 从 Cookie 获取会话 ID
 		sessionID, err := c.Cookie(config.CookieName)
 		if err != nil {
-			c.JSON(http.StatusUnauthorized, protocol.NewMCPErrorResponse(nil, protocol.ErrorCodeAuthenticationFailed, "Session is required", nil))
+			c.JSON(http.StatusUnauthorized, gin.H{
+				"jsonrpc": "2.0",
+				"error": gin.H{
+					"code":    mcperrors.ErrorCodeAuthenticationFailed,
+					"message": "Session is required",
+				},
+			})
 			c.Abort()
 			return
 		}
@@ -138,7 +181,13 @@ func SessionAuthMiddleware(sessionService *SessionService, config *SessionConfig
 		// 验证会话
 		session, err := sessionService.ValidateSession(c.Request.Context(), sessionID)
 		if err != nil {
-			c.JSON(http.StatusUnauthorized, protocol.NewMCPErrorResponse(nil, protocol.ErrorCodeAuthenticationFailed, "Invalid session", nil))
+			c.JSON(http.StatusUnauthorized, gin.H{
+				"jsonrpc": "2.0",
+				"error": gin.H{
+					"code":    mcperrors.ErrorCodeAuthenticationFailed,
+					"message": "Invalid session",
+				},
+			})
 			c.Abort()
 			return
 		}
@@ -237,7 +286,13 @@ func MultiAuthMiddleware(apiKeyService *APIKeyService, jwtService *JWTService, s
 
 		// 如果所有认证方式都失败
 		if authCtx == nil {
-			c.JSON(http.StatusUnauthorized, protocol.NewMCPErrorResponse(nil, protocol.ErrorCodeAuthenticationFailed, "Authentication required", nil))
+			c.JSON(http.StatusUnauthorized, gin.H{
+				"jsonrpc": "2.0",
+				"error": gin.H{
+					"code":    mcperrors.ErrorCodeAuthenticationFailed,
+					"message": "Authentication required",
+				},
+			})
 			c.Abort()
 			return
 		}
@@ -262,14 +317,26 @@ func ScopeMiddleware(requiredScopes ...string) gin.HandlerFunc {
 		// 获取认证上下文
 		authCtx, exists := c.Get("auth_context")
 		if !exists {
-			c.JSON(http.StatusUnauthorized, protocol.NewMCPErrorResponse(nil, protocol.ErrorCodeAuthenticationFailed, "Authentication required", nil))
+			c.JSON(http.StatusUnauthorized, gin.H{
+				"jsonrpc": "2.0",
+				"error": gin.H{
+					"code":    mcperrors.ErrorCodeAuthenticationFailed,
+					"message": "Authentication required",
+				},
+			})
 			c.Abort()
 			return
 		}
 
 		authContext, ok := authCtx.(*AuthContext)
 		if !ok {
-			c.JSON(http.StatusInternalServerError, protocol.NewMCPErrorResponse(nil, protocol.ErrorCodeInternalError, "Invalid auth context", nil))
+			c.JSON(http.StatusInternalServerError, gin.H{
+				"jsonrpc": "2.0",
+				"error": gin.H{
+					"code":    mcperrors.ErrorCodeInternalError,
+					"message": "Invalid auth context",
+				},
+			})
 			c.Abort()
 			return
 		}
@@ -284,9 +351,16 @@ func ScopeMiddleware(requiredScopes ...string) gin.HandlerFunc {
 				}
 			}
 			if !hasScope {
-				c.JSON(http.StatusForbidden, protocol.NewMCPErrorResponse(nil, protocol.ErrorCodeAuthorizationFailed, "Insufficient permissions", map[string]string{
-					"required_scope": requiredScope,
-				}))
+				c.JSON(http.StatusForbidden, gin.H{
+					"jsonrpc": "2.0",
+					"error": gin.H{
+						"code":    mcperrors.ErrorCodeAuthorizationFailed,
+						"message": "Insufficient permissions",
+						"data": gin.H{
+							"required_scope": requiredScope,
+						},
+					},
+				})
 				c.Abort()
 				return
 			}

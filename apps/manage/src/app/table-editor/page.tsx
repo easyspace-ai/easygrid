@@ -1,6 +1,6 @@
 import { useEffect, useState, useRef } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
-import { EasyGridPro } from '@easygrid/grid';
+import { EasyGrid } from '@easygrid/grid';
 import { TableEditorLayout } from '@/components/layouts/table-editor-layout';
 import luckdb from '@/lib/luckdb';
 import { Skeleton } from '@/components/ui/skeleton';
@@ -76,13 +76,13 @@ export default function TableEditor() {
   return (
     <TableEditorLayout>
       <div className="h-full flex flex-col overflow-hidden min-h-0">
-        <EasyGridPro
+        <EasyGrid
           key={tableId} // 当 tableId 变化时，强制重新渲染组件
           client={luckdb}
           tableId={tableId}
           height="auto"
           showShareDBBadge={true}
-          enableAddRecordDialog={true}
+          allowCreateRecord={true}
         />
       </div>
     </TableEditorLayout>

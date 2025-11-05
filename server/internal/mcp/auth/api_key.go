@@ -9,7 +9,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/easyspace-ai/luckdb/server/internal/mcp/protocol"
+	mcperrors "github.com/easyspace-ai/luckdb/server/internal/mcp"
 )
 
 // APIKey API Key 结构
@@ -127,28 +127,28 @@ func (s *APIKeyService) ValidateAPIKey(ctx context.Context, keyString string) (*
 	// 解析 Key String
 	keyID, secret, err := s.parseKeyString(keyString)
 	if err != nil {
-		return nil, protocol.NewAuthenticationFailedError("Invalid API key format")
+		return nil, mcperrors.NewAuthenticationFailedError("Invalid API key format")
 	}
 
 	// 获取 API Key
 	apiKey, err := s.repo.GetByKeyID(ctx, keyID)
 	if err != nil {
-		return nil, protocol.NewAuthenticationFailedError("API key not found")
+		return nil, mcperrors.NewAuthenticationFailedError("API key not found")
 	}
 
 	// 检查是否激活
 	if !apiKey.IsActive {
-		return nil, protocol.NewAuthenticationFailedError("API key is inactive")
+		return nil, mcperrors.NewAuthenticationFailedError("API key is inactive")
 	}
 
 	// 检查是否过期
 	if apiKey.ExpiresAt != nil && apiKey.ExpiresAt.Before(time.Now()) {
-		return nil, protocol.NewAuthenticationFailedError("API key has expired")
+		return nil, mcperrors.NewAuthenticationFailedError("API key has expired")
 	}
 
 	// 验证 Secret
 	if !s.verifySecret(apiKey.Secret, secret) {
-		return nil, protocol.NewAuthenticationFailedError("Invalid API key secret")
+		return nil, mcperrors.NewAuthenticationFailedError("Invalid API key secret")
 	}
 
 	// 更新最后使用时间

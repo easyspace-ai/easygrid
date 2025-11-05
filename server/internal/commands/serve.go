@@ -248,7 +248,7 @@ func corsMiddleware() gin.HandlerFunc {
 		// 开发环境：允许所有来源
 		c.Writer.Header().Set("Access-Control-Allow-Origin", "*")
 		// 注意：当使用 * 时，不能设置 Access-Control-Allow-Credentials: true
-		c.Writer.Header().Set("Access-Control-Allow-Headers", "Content-Type, Content-Length, Accept-Encoding, X-CSRF-Token, Authorization, accept, origin, Cache-Control, X-Requested-With")
+		c.Writer.Header().Set("Access-Control-Allow-Headers", "Content-Type, Content-Length, Accept-Encoding, X-CSRF-Token, Authorization, accept, origin, Cache-Control, X-Requested-With, X-MCP-API-Key")
 		c.Writer.Header().Set("Access-Control-Allow-Methods", "POST, OPTIONS, GET, PUT, DELETE, PATCH")
 
 		if c.Request.Method == "OPTIONS" {

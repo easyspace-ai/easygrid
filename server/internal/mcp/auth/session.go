@@ -7,7 +7,7 @@ import (
 	"fmt"
 	"time"
 
-	"github.com/easyspace-ai/luckdb/server/internal/mcp/protocol"
+	mcperrors "github.com/easyspace-ai/luckdb/server/internal/mcp"
 )
 
 // SessionService 会话服务
@@ -84,17 +84,17 @@ func (s *SessionService) CreateSession(ctx context.Context, userID, ipAddress, u
 func (s *SessionService) ValidateSession(ctx context.Context, sessionID string) (*Session, error) {
 	session, err := s.repo.GetByID(ctx, sessionID)
 	if err != nil {
-		return nil, protocol.NewAuthenticationFailedError("Session not found")
+		return nil, mcperrors.NewAuthenticationFailedError("Session not found")
 	}
 
 	// 检查会话是否过期
 	if session.ExpiresAt.Before(time.Now()) {
-		return nil, protocol.NewAuthenticationFailedError("Session expired")
+		return nil, mcperrors.NewAuthenticationFailedError("Session expired")
 	}
 
 	// 检查会话是否激活
 	if !session.IsActive {
-		return nil, protocol.NewAuthenticationFailedError("Session is inactive")
+		return nil, mcperrors.NewAuthenticationFailedError("Session is inactive")
 	}
 
 	return session, nil
@@ -114,12 +114,12 @@ func (s *SessionService) DestroyAllUserSessions(ctx context.Context, userID stri
 func (s *SessionService) RefreshSession(ctx context.Context, sessionID string) (*Session, error) {
 	session, err := s.repo.GetByID(ctx, sessionID)
 	if err != nil {
-		return nil, protocol.NewAuthenticationFailedError("Session not found")
+		return nil, mcperrors.NewAuthenticationFailedError("Session not found")
 	}
 
 	// 检查会话是否激活
 	if !session.IsActive {
-		return nil, protocol.NewAuthenticationFailedError("Session is inactive")
+		return nil, mcperrors.NewAuthenticationFailedError("Session is inactive")
 	}
 
 	// 延长过期时间

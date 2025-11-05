@@ -46,6 +46,12 @@ export default function Dashboard() {
   const [creatingBase, setCreatingBase] = useState(false)
   const [newBaseName, setNewBaseName] = useState('')
   const [newBaseDescription, setNewBaseDescription] = useState('')
+  // edit/delete dialogs
+  const [editDialogOpen, setEditDialogOpen] = useState(false)
+  const [deleteDialogOpen, setDeleteDialogOpen] = useState(false)
+  const [editingBase, setEditingBase] = useState<Base | null>(null)
+  const [deletingBase, setDeletingBase] = useState<Base | null>(null)
+  const [editingName, setEditingName] = useState('')
   const navigate = useNavigate()
 
   useEffect(() => {
@@ -120,6 +126,46 @@ export default function Dashboard() {
 
   const handleBaseClick = (baseId: string) => {
     navigate(`/base/${baseId}`)
+  }
+
+  const openEditDialog = (base: Base) => {
+    setEditingBase(base)
+    setEditingName(base.name)
+    setEditDialogOpen(true)
+  }
+
+  const submitEdit = async () => {
+    if (!editingBase) return
+    const trimmed = editingName.trim()
+    if (!trimmed || trimmed === editingBase.name) {
+      setEditDialogOpen(false)
+      return
+    }
+    try {
+      await luckdb.bases.update(editingBase.id, { name: trimmed } as any)
+      toast.success('重命名成功')
+      setEditDialogOpen(false)
+      if (selectedSpace) await loadBases(selectedSpace.id)
+    } catch (err: any) {
+      toast.error(err?.message || '重命名失败')
+    }
+  }
+
+  const openDeleteDialog = (base: Base) => {
+    setDeletingBase(base)
+    setDeleteDialogOpen(true)
+  }
+
+  const submitDelete = async () => {
+    if (!deletingBase) return
+    try {
+      await luckdb.bases.delete(deletingBase.id)
+      toast.success('删除成功')
+      setDeleteDialogOpen(false)
+      if (selectedSpace) await loadBases(selectedSpace.id)
+    } catch (err: any) {
+      toast.error(err?.message || '删除失败')
+    }
   }
 
 
@@ -282,17 +328,60 @@ export default function Dashboard() {
                 <BaseCard
                   base={base}
                   onClick={() => handleBaseClick(base.id)}
-                  onEdit={() => {
-                    toast.info('编辑功能开发中')
-                  }}
-                  onDelete={() => {
-                    toast.info('删除功能开发中')
-                  }}
+                  onEdit={() => openEditDialog(base)}
+                  onDelete={() => openDeleteDialog(base)}
                 />
               </div>
             ))}
           </div>
         )}
+
+        {/* 编辑数据库 - Dialog */}
+        <Dialog open={editDialogOpen} onOpenChange={setEditDialogOpen}>
+          <DialogContent className="sm:max-w-[420px]">
+            <DialogHeader>
+              <DialogTitle>重命名数据库</DialogTitle>
+              <DialogDescription>请输入新的数据库名称。</DialogDescription>
+            </DialogHeader>
+            <div className="grid gap-4 py-4">
+              <div className="grid grid-cols-4 items-center gap-4">
+                <Label htmlFor="edit-base-name" className="text-right">名称</Label>
+                <Input
+                  id="edit-base-name"
+                  className="col-span-3"
+                  value={editingName}
+                  onChange={(e) => setEditingName(e.target.value)}
+                  onKeyDown={(e) => {
+                    if (e.key === 'Enter' && !e.shiftKey) {
+                      e.preventDefault();
+                      submitEdit();
+                    }
+                  }}
+                />
+              </div>
+            </div>
+            <DialogFooter>
+              <Button variant="outline" onClick={() => setEditDialogOpen(false)}>取消</Button>
+              <Button onClick={submitEdit}>确定</Button>
+            </DialogFooter>
+          </DialogContent>
+        </Dialog>
+
+        {/* 删除数据库 - 确认 Dialog */}
+        <Dialog open={deleteDialogOpen} onOpenChange={setDeleteDialogOpen}>
+          <DialogContent className="sm:max-w-[420px]">
+            <DialogHeader>
+              <DialogTitle>删除数据库</DialogTitle>
+              <DialogDescription>
+                此操作不可撤销，确定要删除 “{deletingBase?.name}” 吗？
+              </DialogDescription>
+            </DialogHeader>
+            <DialogFooter>
+              <Button variant="outline" onClick={() => setDeleteDialogOpen(false)}>取消</Button>
+              <Button variant="destructive" onClick={submitDelete}>删除</Button>
+            </DialogFooter>
+          </DialogContent>
+        </Dialog>
       </div>
     </BaseLayout>
   )

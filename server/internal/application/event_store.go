@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"sync"
 	"time"
 
 	"github.com/easyspace-ai/luckdb/server/internal/domain/events"
@@ -14,8 +15,10 @@ import (
 // EventStore 事件存储实现
 // 负责事件的持久化存储和查询
 type EventStore struct {
-	db     *gorm.DB
-	config *EventStoreConfig
+	db          *gorm.DB
+	config      *EventStoreConfig
+	migrateOnce  sync.Once
+	migrateError error
 }
 
 // EventStoreConfig 事件存储配置
@@ -73,12 +76,21 @@ func NewEventStore(db *gorm.DB, config *EventStoreConfig) *EventStore {
 		config: config,
 	}
 
-	// 自动迁移表结构
-	if err := store.migrate(); err != nil {
-		logger.Error("事件存储表迁移失败", logger.ErrorField(err))
-	}
+	// 延迟迁移：不在启动时执行，而是在第一次使用时执行
+	// 这样可以避免启动时的数据库元数据查询，提升启动速度
 
 	return store
+}
+
+// ensureMigrated 确保表结构已迁移（延迟执行）
+func (es *EventStore) ensureMigrated() error {
+	es.migrateOnce.Do(func() {
+		es.migrateError = es.migrate()
+		if es.migrateError != nil {
+			logger.Error("事件存储表迁移失败", logger.ErrorField(es.migrateError))
+		}
+	})
+	return es.migrateError
 }
 
 // migrate 迁移表结构
@@ -88,6 +100,11 @@ func (es *EventStore) migrate() error {
 
 // Save 保存单个事件
 func (es *EventStore) Save(ctx context.Context, event events.DomainEvent) error {
+	// 确保表结构已迁移
+	if err := es.ensureMigrated(); err != nil {
+		return fmt.Errorf("migration failed: %w", err)
+	}
+
 	if event == nil {
 		return fmt.Errorf("event cannot be nil")
 	}
@@ -111,6 +128,11 @@ func (es *EventStore) Save(ctx context.Context, event events.DomainEvent) error 
 
 // SaveBatch 批量保存事件
 func (es *EventStore) SaveBatch(ctx context.Context, eventList []events.DomainEvent) error {
+	// 确保表结构已迁移
+	if err := es.ensureMigrated(); err != nil {
+		return fmt.Errorf("migration failed: %w", err)
+	}
+
 	if len(eventList) == 0 {
 		return nil
 	}
@@ -137,6 +159,11 @@ func (es *EventStore) SaveBatch(ctx context.Context, eventList []events.DomainEv
 
 // GetEvents 获取聚合根的所有事件
 func (es *EventStore) GetEvents(ctx context.Context, aggregateID string, fromVersion int64) ([]events.DomainEvent, error) {
+	// 确保表结构已迁移
+	if err := es.ensureMigrated(); err != nil {
+		return nil, fmt.Errorf("migration failed: %w", err)
+	}
+
 	var records []EventRecord
 
 	query := es.db.WithContext(ctx).Where("aggregate_id = ?", aggregateID)
@@ -165,6 +192,11 @@ func (es *EventStore) GetEvents(ctx context.Context, aggregateID string, fromVer
 
 // GetEventsByType 根据类型获取事件
 func (es *EventStore) GetEventsByType(ctx context.Context, eventType string, limit int) ([]events.DomainEvent, error) {
+	// 确保表结构已迁移
+	if err := es.ensureMigrated(); err != nil {
+		return nil, fmt.Errorf("migration failed: %w", err)
+	}
+
 	if limit <= 0 {
 		limit = 100
 	}
@@ -195,6 +227,11 @@ func (es *EventStore) GetEventsByType(ctx context.Context, eventType string, lim
 
 // GetEventsByTimeRange 根据时间范围获取事件
 func (es *EventStore) GetEventsByTimeRange(ctx context.Context, startTime, endTime time.Time, limit int) ([]events.DomainEvent, error) {
+	// 确保表结构已迁移
+	if err := es.ensureMigrated(); err != nil {
+		return nil, fmt.Errorf("migration failed: %w", err)
+	}
+
 	if limit <= 0 {
 		limit = 100
 	}
@@ -225,6 +262,11 @@ func (es *EventStore) GetEventsByTimeRange(ctx context.Context, startTime, endTi
 
 // CleanupOldEvents 清理过期事件
 func (es *EventStore) CleanupOldEvents(ctx context.Context) error {
+	// 确保表结构已迁移
+	if err := es.ensureMigrated(); err != nil {
+		return fmt.Errorf("migration failed: %w", err)
+	}
+
 	if !es.config.CleanupEnabled {
 		return nil
 	}
@@ -250,6 +292,11 @@ func (es *EventStore) CleanupOldEvents(ctx context.Context) error {
 
 // GetStats 获取事件存储统计信息
 func (es *EventStore) GetStats(ctx context.Context) (map[string]interface{}, error) {
+	// 确保表结构已迁移
+	if err := es.ensureMigrated(); err != nil {
+		return nil, fmt.Errorf("migration failed: %w", err)
+	}
+
 	var totalCount int64
 	var typeCounts []struct {
 		EventType string `json:"event_type"`

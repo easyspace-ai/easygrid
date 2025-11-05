@@ -1,7 +1,7 @@
 import { useState, useEffect, useCallback } from 'react';
 import type { ReactNode } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
-import { DatabaseSidebar, DatabaseHeader } from '@/components/database';
+import { DatabaseSidebar } from '@/components/database';
 import { ResizablePanelGroup, ResizablePanel, ResizableHandle } from '@/components/ui/resizable';
 import luckdb from '@/lib/luckdb';
 import type { Base, Table as TableType, View } from '@easygrid/sdk';
@@ -88,7 +88,7 @@ export function TableEditorLayout({ children }: TableEditorLayoutProps) {
         // 暂时模拟：假设已连接，记录数通过其他方式获取
         setConnectionStatus({
           connected: true,
-          recordCount: undefined, // 可以后续从 EasyGridPro 组件获取
+          recordCount: undefined, // 可以后续从 EasyGrid 组件获取
         });
       } catch (error) {
         setConnectionStatus({ connected: false });
@@ -210,24 +210,6 @@ export function TableEditorLayout({ children }: TableEditorLayoutProps) {
 
   return (
     <div className="flex flex-col h-screen overflow-hidden bg-background">
-      {/* 顶部工具栏 */}
-      <DatabaseHeader 
-        base={base}
-        currentTable={currentTable}
-        currentView={currentView}
-        loading={loading}
-        connectionStatus={connectionStatus}
-        onShare={() => {
-          toast.info('分享功能开发中');
-        }}
-        onExport={() => {
-          toast.info('导出功能开发中');
-        }}
-        onSettings={() => {
-          toast.info('设置功能开发中');
-        }}
-      />
-      
       {/* 主内容区域 - 使用 ResizablePanelGroup */}
       <ResizablePanelGroup
         direction="horizontal"

@@ -46,10 +46,11 @@ export function SpaceSwitcher({
     <Popover open={open} onOpenChange={setOpen}>
       <PopoverTrigger asChild>
         <Button
+          type="button"
           variant="outline"
           role="combobox"
           aria-expanded={open}
-          className="w-full justify-between bg-background/50 hover:bg-background/80 border-0 shadow-none h-auto p-3"
+          className="w-full justify-between bg-background/50 hover:bg-background/80 border-0 shadow-none h-auto p-3 cursor-pointer relative z-10"
         >
           <div className="flex items-center gap-3 min-w-0 flex-1">
             <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-primary text-primary-foreground flex-shrink-0">
@@ -67,7 +68,7 @@ export function SpaceSwitcher({
           <ChevronDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
         </Button>
       </PopoverTrigger>
-      <PopoverContent className="w-[--radix-popover-trigger-width] p-0" align="start">
+      <PopoverContent className="w-[--radix-popover-trigger-width] p-0 z-[100]" align="start">
         <Command>
           <CommandInput placeholder="搜索空间..." />
           <CommandList>

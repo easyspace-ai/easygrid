@@ -72,6 +72,9 @@ func SetupRoutes(router *gin.Engine, cont *container.Container, staticFiles embe
 	setupShareDBRoutes(v1, cont)
 
 	// WebSocket 路由已在前面设置
+
+	// MCP HTTP 路由（使用标准 MCP 库）
+	setupMCPV2Routes(router, cont)
 }
 
 // setupUserConfigRoutes 设置用户配置路由
@@ -421,6 +424,18 @@ func setupRealtimeRoutes(router *gin.Engine, cont *container.Container) {
 	// SSE 路由（需要认证）
 	router.GET("/api/realtime", JWTAuthMiddleware(cont.AuthService()), cont.RealtimeManager().HandleSSE)
 	router.POST("/api/realtime", JWTAuthMiddleware(cont.AuthService()), cont.RealtimeManager().HandleSSESubscription)
+}
+
+// setupMCPV2Routes 设置 MCP V2 路由（使用标准 MCP 库）
+func setupMCPV2Routes(router *gin.Engine, cont *container.Container) {
+	mcpHandler, err := NewMCPHandler(cont)
+	if err != nil {
+		// 如果 MCP 初始化失败，记录错误但不阻塞启动
+		logger.Warn("MCP handler initialization failed", logger.ErrorField(err))
+		return
+	}
+
+	mcpHandler.SetupRoutes(router)
 }
 
 // setupShareDBRoutes 设置 ShareDB 路由

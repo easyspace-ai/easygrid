@@ -63,8 +63,9 @@ export function CreateSpaceDialog({ onSpaceCreated }: CreateSpaceDialogProps) {
     <Dialog open={open} onOpenChange={setOpen}>
       <DialogTrigger asChild>
         <Button
+          type="button"
           variant="outline"
-          className="w-full justify-start gap-2 text-primary border-primary/30 hover:bg-primary/10"
+          className="w-full justify-start gap-2 text-primary border-primary/30 hover:bg-primary/10 cursor-pointer"
         >
           <Plus className="h-4 w-4" />
           创建新空间

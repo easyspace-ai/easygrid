@@ -35,6 +35,7 @@ func DefaultCORSConfig() CORSConfig {
 			"Content-Type",
 			"Authorization",
 			"X-Requested-With",
+			"X-MCP-API-Key",
 			"Accept",
 			"Accept-Encoding",
 			"Accept-Language",
