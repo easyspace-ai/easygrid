@@ -428,3 +428,42 @@ func (r *FieldRepositoryImpl) BatchDelete(ctx context.Context, ids []valueobject
 func (r *FieldRepositoryImpl) NextID() valueobject.FieldID {
 	return valueobject.NewFieldID("")
 }
+
+// FindLinkFieldsToTable 查找所有指向指定表的 Link 字段
+// 查询所有 Link 类型字段，且 options.link.linkedTableID 等于目标 tableID
+func (r *FieldRepositoryImpl) FindLinkFieldsToTable(ctx context.Context, tableID string) ([]*entity.Field, error) {
+	var dbFields []*models.Field
+
+	// 使用事务连接（如果存在）
+	db := database.WithTx(ctx, r.db)
+
+	// 查询所有 Link 类型字段
+	// 使用 PostgreSQL 的 JSONB 查询功能来过滤 options.link.linkedTableID
+	// 注意：需要同时支持 Link（大写）和 link（小写）两种格式，以及 linked_table_id 和 foreignTableId 两种字段名
+	err := db.WithContext(ctx).
+		Table("field").
+		Where("type = ?", "link").
+		Where("deleted_time IS NULL").
+		Where("(options::jsonb->'Link'->>'linked_table_id' = ? OR options::jsonb->'link'->>'linked_table_id' = ? OR options::jsonb->'Link'->>'foreignTableId' = ? OR options::jsonb->'link'->>'foreignTableId' = ?)", tableID, tableID, tableID, tableID).
+		Order("field_order ASC").
+		Find(&dbFields).Error
+
+	if err != nil {
+		logger.Error("❌ FieldRepository.FindLinkFieldsToTable 查询失败",
+			logger.String("table_id", tableID),
+			logger.ErrorField(err))
+		return nil, fmt.Errorf("failed to find link fields to table: %w", err)
+	}
+
+	logger.Info("✅ FieldRepository.FindLinkFieldsToTable 查询成功",
+		logger.String("table_id", tableID),
+		logger.Int("found_count", len(dbFields)))
+
+	// 转换为领域实体
+	fields, err := mapper.ToFieldList(dbFields)
+	if err != nil {
+		return nil, fmt.Errorf("failed to convert fields: %w", err)
+	}
+
+	return fields, nil
+}

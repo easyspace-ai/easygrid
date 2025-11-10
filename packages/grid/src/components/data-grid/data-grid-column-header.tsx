@@ -379,7 +379,7 @@ export function DataGridColumnHeader<TData, TValue>({
           sideOffset={4} 
           className="w-60 bg-white/95 backdrop-blur-sm border shadow-lg"
         >
-          {onUpdateField && getFieldInfo && ( // 修改字段功能
+          {onUpdateField && getFieldInfo && ( // 编辑字段功能
             <>
               <DropdownMenuItem
                 className="[&_svg]:text-muted-foreground"
@@ -389,7 +389,7 @@ export function DataGridColumnHeader<TData, TValue>({
                 }}
               >
                 <PencilIcon />
-                修改字段
+                编辑字段
               </DropdownMenuItem>
               {(column.getCanSort?.() || column.getCanPin?.() || column.getCanHide?.() || onDeleteField) && <DropdownMenuSeparator />}
             </>

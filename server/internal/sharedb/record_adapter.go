@@ -35,18 +35,36 @@ func (a *RecordAdapter) GetSnapshot(ctx context.Context, tableID, recordID strin
 	// 查询数据库获取记录数据
 	record, err := a.recordRepo.FindByTableAndID(ctx, tableID, valueobject.NewRecordID(recordID))
 	if err != nil {
-		a.logger.Error("❌ GetByID failed",
+		// 查询错误时，也返回空快照而不是错误
+		// 这样可以支持客户端先订阅，后创建数据的场景
+		a.logger.Warn("⚠️ GetByID failed, returning empty snapshot",
 			zap.String("table_id", tableID),
 			zap.String("record_id", recordID),
 			zap.Error(err))
-		return nil, fmt.Errorf("failed to get record: %w", err)
+		return &Snapshot{
+			ID:      recordID,
+			Type:    "json0",
+			Version: 0,
+			Data: map[string]interface{}{
+				"data": make(map[string]interface{}),
+			},
+		}, nil
 	}
 
 	if record == nil {
-		a.logger.Error("❌ Record not found",
+		// 记录不存在时，返回一个空快照而不是错误
+		// 这样可以支持客户端先订阅，后创建数据的场景
+		a.logger.Warn("⚠️ Record not found, returning empty snapshot",
 			zap.String("table_id", tableID),
 			zap.String("record_id", recordID))
-		return nil, fmt.Errorf("record not found: %s", recordID)
+		return &Snapshot{
+			ID:      recordID,
+			Type:    "json0",
+			Version: 0,
+			Data: map[string]interface{}{
+				"data": make(map[string]interface{}),
+			},
+		}, nil
 	}
 
 	// 构建快照数据

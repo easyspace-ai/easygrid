@@ -2,6 +2,7 @@ package application
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"time"
 
@@ -86,21 +87,34 @@ func (s *CacheService) Get(ctx context.Context, key string, dest interface{}) er
 	// 1. 先尝试本地缓存
 	if s.config.EnableLocalCache && s.localCache != nil {
 		if value, found := s.localCache.Get(fullKey); found {
-			// 将值复制到dest
-			if destPtr, ok := dest.(*interface{}); ok {
-				*destPtr = value
+			// ✅ 关键修复：使用 JSON 序列化/反序列化来复制值，支持任意类型
+			// 这样可以正确处理指针类型（如 *recordEntity.Record）
+			if err := s.copyValue(value, dest); err != nil {
+				logger.Warn("从本地缓存复制值失败，继续查询 Redis",
+					logger.String("key", key),
+					logger.ErrorField(err))
+				// 复制失败，继续查询 Redis
+			} else {
+				s.logCacheHit("local", key)
+				return nil
 			}
-			s.logCacheHit("local", key)
-			return nil
 		}
 	}
 
 	// 2. 尝试Redis缓存
 	if s.config.EnableRedisCache && s.redisCache != nil {
 		if err := s.redisCache.Get(ctx, fullKey, dest); err == nil {
-			// 写入本地缓存
+			// ✅ 关键修复：使用 copyValue 方法复制值到本地缓存，而不是直接写入 dest
+			// 这样可以避免将 nil 值写入本地缓存，同时确保类型正确
 			if s.config.EnableLocalCache && s.localCache != nil {
-				s.localCache.Set(fullKey, dest, s.config.LocalCacheTTL)
+				// 先复制值到临时变量，然后写入本地缓存
+				var tempValue interface{}
+				if err := s.copyValue(dest, &tempValue); err == nil {
+					// 只有当值不为 nil 时才写入本地缓存
+					if tempValue != nil {
+						s.localCache.Set(fullKey, tempValue, s.config.LocalCacheTTL)
+					}
+				}
 			}
 			s.logCacheHit("redis", key)
 			return nil
@@ -109,6 +123,22 @@ func (s *CacheService) Get(ctx context.Context, key string, dest interface{}) er
 
 	s.logCacheMiss(key)
 	return cache.ErrCacheNotFound
+}
+
+// copyValue 复制值（辅助方法）
+// 使用 JSON 序列化/反序列化来复制值，支持任意类型
+func (s *CacheService) copyValue(src, dest interface{}) error {
+	// 使用 JSON 序列化/反序列化来复制值
+	data, err := json.Marshal(src)
+	if err != nil {
+		return fmt.Errorf("failed to marshal source value: %w", err)
+	}
+
+	if err := json.Unmarshal(data, dest); err != nil {
+		return fmt.Errorf("failed to unmarshal to destination: %w", err)
+	}
+
+	return nil
 }
 
 // Set 设置缓存（多级缓存策略）

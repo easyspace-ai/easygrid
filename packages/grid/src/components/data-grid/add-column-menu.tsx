@@ -21,6 +21,7 @@ import {
   Bot,
 } from 'lucide-react';
 import { cn } from "../../lib/utils";
+import { LinkFieldEditor } from "./link-field-editor";
 
 /**
  * 字段类型分类
@@ -169,11 +170,21 @@ const fieldTypes: FieldType[] = [
   // 链接类型
   {
     id: 'link',
+    name: '关联',
+    icon: Link,
+    description: '关联其他表的记录',
+    category: 'link',
+    color: '#6366f1',
+    popular: true,
+    keywords: ['关联', 'link', '关系', '关联字段', 'relation'],
+  },
+  {
+    id: 'url',
     name: '链接',
     icon: Link,
     description: '网址链接',
     category: 'link',
-    color: '#6366f1',
+    color: '#8b5cf6',
     keywords: ['链接', 'url', '网址'],
   },
   {
@@ -395,6 +406,14 @@ export function AddColumnMenu({
           trigger: 'manual',
           cache: true,
         });
+      } else if (fieldType === 'link') {
+        setFieldOptions({
+          link: {
+            foreignTableId: '',
+            relationship: 'manyOne',
+            isOneWay: false,
+          },
+        });
       } else {
         setFieldOptions({});
       }
@@ -609,6 +628,8 @@ export function AddColumnMenu({
                 <FormulaEditor value={fieldOptions} onChange={setFieldOptions} />
               ) : selectedType?.id === 'ai' ? (
                 <AIFieldEditor value={fieldOptions} onChange={setFieldOptions} />
+              ) : selectedType?.id === 'link' ? (
+                <LinkFieldEditor value={fieldOptions} onChange={setFieldOptions} />
               ) : (
                 <div className="text-xs text-muted-foreground">该字段暂无额外配置</div>
               )}
@@ -626,6 +647,16 @@ export function AddColumnMenu({
                 onClick={() => {
                   if (!selectedType) {
                     return;
+                  }
+                  
+                  // 验证关联字段配置
+                  if (selectedType.id === 'link' && fieldOptions?.link) {
+                    const linkOpts = fieldOptions.link;
+                    if (!linkOpts.foreignTableId && !linkOpts.linked_table_id) {
+                      // TODO: 显示错误提示
+                      alert('请选择要关联的表');
+                      return;
+                    }
                   }
                   
                   const payload = { 

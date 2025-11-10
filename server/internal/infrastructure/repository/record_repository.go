@@ -275,3 +275,16 @@ func (r *RecordRepositoryImpl) FindWithVersion(ctx context.Context, tableID stri
 func (r *RecordRepositoryImpl) NextID() valueobject.RecordID {
 	return valueobject.NewRecordID("")
 }
+
+// BatchUpdateLinkFieldTitle 批量更新 Link 字段的 title
+// ⚠️ 此方法需要动态表架构支持，RecordRepositoryImpl 不支持
+// 请使用 RecordRepositoryDynamic 实现
+func (r *RecordRepositoryImpl) BatchUpdateLinkFieldTitle(
+	ctx context.Context,
+	tableID string,
+	linkFieldID string,
+	sourceRecordID string,
+	newTitle string,
+) error {
+	return fmt.Errorf("BatchUpdateLinkFieldTitle is not supported by RecordRepositoryImpl, please use RecordRepositoryDynamic")
+}

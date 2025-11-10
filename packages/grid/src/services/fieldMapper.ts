@@ -63,7 +63,14 @@ export function mapFieldTypeToCellVariant(
       return 'email'
     
     case 'url':
+      // URL 链接类型
+      return 'link'
     case 'link':
+      // 关联字段类型：检查是否有 link 选项
+      if (options && ((options as any).link || (options as any).Link)) {
+        return 'link'
+      }
+      // 如果没有 link 选项，可能是 URL 链接，也返回 'link'
       return 'link'
     
     case 'phone':
@@ -90,7 +97,10 @@ export function mapFieldTypeToCellVariant(
 /**
  * 将 Dice 单元格类型映射回 SDK 字段类型
  */
-export function mapCellVariantToFieldType(cellVariant: DiceCellVariant): FieldType {
+export function mapCellVariantToFieldType(
+  cellVariant: DiceCellVariant,
+  options?: any
+): FieldType {
   switch (cellVariant) {
     case 'short-text':
       return 'singleLineText'
@@ -117,6 +127,11 @@ export function mapCellVariantToFieldType(cellVariant: DiceCellVariant): FieldTy
       return 'email'
     
     case 'link':
+      // 检查 options 中是否有 link 或 Link 选项，如果有则是关联字段，否则是 URL 链接
+      if (options && ((options as any).link || (options as any).Link)) {
+        return 'link'
+      }
+      // 如果没有 link 选项，返回 'url'（URL 链接字段）
       return 'url'
     
     case 'phone':
@@ -150,6 +165,12 @@ export function mapFieldOptionsToCellOptions(options?: FieldOptions): {
   min?: number
   max?: number
   expression?: string
+  // 关联字段选项
+  foreignTableId?: string
+  relationship?: string
+  lookupFieldId?: string
+  allowMultiple?: boolean
+  isUrl?: boolean
   [key: string]: any
 } {
   if (!options) return {}
@@ -159,6 +180,11 @@ export function mapFieldOptionsToCellOptions(options?: FieldOptions): {
     min?: number
     max?: number
     expression?: string
+    foreignTableId?: string
+    relationship?: string
+    lookupFieldId?: string
+    allowMultiple?: boolean
+    isUrl?: boolean
     [key: string]: any
   } = {}
 
@@ -196,9 +222,42 @@ export function mapFieldOptionsToCellOptions(options?: FieldOptions): {
     cellOptions.expression = expression
   }
 
+  // 处理关联字段选项（LinkOptions）
+  const linkOptions = (options as any).link || (options as any).Link
+  if (linkOptions) {
+    // 提取关联字段配置
+    if (linkOptions.linked_table_id || linkOptions.foreignTableId) {
+      cellOptions.foreignTableId = linkOptions.linked_table_id || linkOptions.foreignTableId
+    }
+    if (linkOptions.relationship) {
+      cellOptions.relationship = linkOptions.relationship
+    }
+    if (linkOptions.lookupFieldId || linkOptions.lookup_field_id) {
+      cellOptions.lookupFieldId = linkOptions.lookupFieldId || linkOptions.lookup_field_id
+    }
+    if (linkOptions.allowMultiple !== undefined) {
+      cellOptions.allowMultiple = linkOptions.allowMultiple
+    } else if (linkOptions.allow_multiple !== undefined) {
+      cellOptions.allowMultiple = linkOptions.allow_multiple
+    } else {
+      // 根据 relationship 判断是否允许多选
+      const relationship = linkOptions.relationship || linkOptions.relationship_type
+      if (relationship === 'manyMany' || relationship === 'oneMany' || relationship === 'many_to_many' || relationship === 'one_to_many') {
+        cellOptions.allowMultiple = true
+      } else {
+        cellOptions.allowMultiple = false
+      }
+    }
+    // 标记为关联字段（不是 URL 链接）
+    cellOptions.isUrl = false
+  } else {
+    // 如果没有 link 选项，可能是 URL 链接类型
+    cellOptions.isUrl = true
+  }
+
   // 保留其他选项
   Object.keys(options).forEach((key) => {
-    if (!['choices', 'min', 'max', 'expression'].includes(key)) {
+    if (!['choices', 'min', 'max', 'expression', 'link', 'Link'].includes(key)) {
       cellOptions[key] = (options as any)[key]
     }
   })

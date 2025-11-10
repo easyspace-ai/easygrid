@@ -47,7 +47,14 @@ export function buildCellType(
       return { variant: 'date' }
     
     case 'link':
-      return { variant: 'link' }
+      return {
+        variant: 'link',
+        ...(options.foreignTableId && { foreignTableId: String(options.foreignTableId) }),
+        ...(options.relationship && { relationship: String(options.relationship) }),
+        ...(options.lookupFieldId && { lookupFieldId: String(options.lookupFieldId) }),
+        ...(options.allowMultiple !== undefined && { allowMultiple: Boolean(options.allowMultiple) }),
+        ...(options.isUrl !== undefined && { isUrl: Boolean(options.isUrl) }),
+      }
     
     case 'email':
       return { variant: 'email' }

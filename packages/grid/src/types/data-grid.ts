@@ -7,6 +7,15 @@ export interface CellSelectOption {
   value: string;
 }
 
+/**
+ * 关联字段单元格值
+ * 参考 teable 的 ILinkCellValue
+ */
+export interface LinkCellValue {
+  id: string;                         // 关联记录的ID（必需）
+  title?: string;                     // 显示文本（可选，从 lookup field 提取）
+}
+
 export type Cell =
   | {
       variant: "short-text";
@@ -36,6 +45,13 @@ export type Cell =
     }
   | {
       variant: "link";
+      // 关联字段选项
+      foreignTableId?: string;        // 关联表ID
+      relationship?: string;           // 关系类型：oneOne, manyMany, oneMany, manyOne
+      lookupFieldId?: string;          // 显示字段ID
+      allowMultiple?: boolean;          // 是否允许多选
+      // 保留 URL 链接的兼容性
+      isUrl?: boolean;                  // 是否为 URL 链接（向后兼容）
     }
   | {
       variant: "email";

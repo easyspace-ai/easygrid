@@ -897,3 +897,175 @@ func (v *AutoNumberValidator) Repair(ctx context.Context, value interface{}, fie
 func (v *AutoNumberValidator) ConvertStringToValue(ctx context.Context, str string, field *entity.Field) (interface{}, error) {
 	return nil, fmt.Errorf("自动编号字段不能设置值")
 }
+
+// ==================== 关联字段验证器 ====================
+
+// LinkValidator 关联字段验证器
+// Link 字段的值应该是 LinkCellValue 对象或数组
+// LinkCellValue 格式: {id: string, title?: string}
+type LinkValidator struct{}
+
+func NewLinkValidator() *LinkValidator {
+	return &LinkValidator{}
+}
+
+func (v *LinkValidator) SupportedType() valueobject.FieldType {
+	fieldType, _ := valueobject.NewFieldType("link")
+	return fieldType
+}
+
+func (v *LinkValidator) ValidateCell(ctx context.Context, value interface{}, field *entity.Field) *ValidationResult {
+	if value == nil {
+		return Success(nil)
+	}
+
+	// 处理数组格式（多选）
+	if arr, ok := value.([]interface{}); ok {
+		if len(arr) == 0 {
+			return Success(nil)
+		}
+		// 验证每个元素都是 LinkCellValue 格式
+		for i, item := range arr {
+			if item == nil {
+				return Failure(NewValidationError(field.Name().String(), fmt.Sprintf("关联记录项[%d]不能为空", i), item))
+			}
+			if err := v.validateLinkCellValue(item); err != nil {
+				return Failure(NewValidationError(field.Name().String(), fmt.Sprintf("关联记录项[%d]格式无效: %s", i, err.Error()), item))
+			}
+		}
+		return Success(arr)
+	}
+
+	// 处理单个对象格式（单选）
+	if obj, ok := value.(map[string]interface{}); ok {
+		if len(obj) == 0 {
+			return Success(nil)
+		}
+		if err := v.validateLinkCellValue(obj); err != nil {
+			return Failure(NewValidationError(field.Name().String(), fmt.Sprintf("关联记录格式无效: %s", err.Error()), value))
+		}
+		return Success(obj)
+	}
+
+	// 尝试从 JSON 字符串解析
+	if str, ok := value.(string); ok {
+		if str == "" {
+			return Success(nil)
+		}
+		var result interface{}
+		if err := json.Unmarshal([]byte(str), &result); err == nil {
+			return v.ValidateCell(ctx, result, field)
+		}
+		return Failure(NewValidationError(field.Name().String(), "无法解析关联记录JSON", value))
+	}
+
+	return Failure(NewValidationError(field.Name().String(), "关联记录必须是对象或数组格式", value))
+}
+
+// validateLinkCellValue 验证单个 LinkCellValue 对象
+func (v *LinkValidator) validateLinkCellValue(value interface{}) error {
+	obj, ok := value.(map[string]interface{})
+	if !ok {
+		return fmt.Errorf("必须是对象格式")
+	}
+
+	// 必须包含 id 字段
+	id, exists := obj["id"]
+	if !exists {
+		return fmt.Errorf("缺少必需的 'id' 字段")
+	}
+
+	// id 必须是字符串
+	if idStr, ok := id.(string); !ok || idStr == "" {
+		return fmt.Errorf("'id' 字段必须是非空字符串")
+	}
+
+	// title 是可选的，但如果存在必须是字符串
+	if title, exists := obj["title"]; exists && title != nil {
+		if _, ok := title.(string); !ok {
+			return fmt.Errorf("'title' 字段必须是字符串")
+		}
+	}
+
+	return nil
+}
+
+func (v *LinkValidator) Repair(ctx context.Context, value interface{}, field *entity.Field) interface{} {
+	if value == nil {
+		return nil
+	}
+
+	// 尝试修复：如果是字符串，尝试解析为 JSON
+	if str, ok := value.(string); ok {
+		if str == "" {
+			return nil
+		}
+		var result interface{}
+		if err := json.Unmarshal([]byte(str), &result); err == nil {
+			// 递归调用验证
+			result = v.Repair(ctx, result, field)
+			return result
+		}
+		return nil
+	}
+
+	// 如果是数组，尝试修复每个元素
+	if arr, ok := value.([]interface{}); ok {
+		repaired := make([]interface{}, 0, len(arr))
+		for _, item := range arr {
+			if item == nil {
+				continue
+			}
+			if obj, ok := item.(map[string]interface{}); ok {
+				// 确保有 id 字段
+				if id, exists := obj["id"]; exists && id != nil {
+					repairedObj := make(map[string]interface{})
+					repairedObj["id"] = fmt.Sprintf("%v", id)
+					if title, exists := obj["title"]; exists {
+						repairedObj["title"] = fmt.Sprintf("%v", title)
+					}
+					repaired = append(repaired, repairedObj)
+				}
+			}
+		}
+		if len(repaired) == 0 {
+			return nil
+		}
+		return repaired
+	}
+
+	// 如果是单个对象，尝试修复
+	if obj, ok := value.(map[string]interface{}); ok {
+		if id, exists := obj["id"]; exists && id != nil {
+			repairedObj := make(map[string]interface{})
+			repairedObj["id"] = fmt.Sprintf("%v", id)
+			if title, exists := obj["title"]; exists {
+				repairedObj["title"] = fmt.Sprintf("%v", title)
+			}
+			return repairedObj
+		}
+		return nil
+	}
+
+	return nil
+}
+
+func (v *LinkValidator) ConvertStringToValue(ctx context.Context, str string, field *entity.Field) (interface{}, error) {
+	if str == "" {
+		return nil, nil
+	}
+
+	// 尝试解析 JSON 字符串
+	var result interface{}
+	if err := json.Unmarshal([]byte(str), &result); err != nil {
+		return nil, fmt.Errorf("无法解析关联记录JSON: %w", err)
+	}
+
+	// 验证解析后的值
+	validationResult := v.ValidateCell(ctx, result, field)
+	if !validationResult.Success {
+		return nil, validationResult.Error
+	}
+
+	return validationResult.Value, nil
+}

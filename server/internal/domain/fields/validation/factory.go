@@ -61,6 +61,9 @@ func (f *ValidatorFactory) registerValidators() {
 	f.Register(NewEmailValidator())
 	f.Register(NewPhoneValidator())
 
+	// 关联字段类型
+	f.Register(NewLinkValidator())
+
 	// 附件类型
 	f.Register(NewAttachmentValidator())
 

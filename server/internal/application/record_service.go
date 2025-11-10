@@ -3,6 +3,7 @@ package application
 import (
 	"context"
 	"fmt"
+	"strings"
 
 	"github.com/easyspace-ai/luckdb/server/internal/application/dto"
 	"github.com/easyspace-ai/luckdb/server/internal/domain/fields/repository"
@@ -10,6 +11,7 @@ import (
 	recordRepo "github.com/easyspace-ai/luckdb/server/internal/domain/record/repository"
 	"github.com/easyspace-ai/luckdb/server/internal/domain/record/valueobject"
 	tableRepo "github.com/easyspace-ai/luckdb/server/internal/domain/table/repository"
+	tableService "github.com/easyspace-ai/luckdb/server/internal/domain/table/service"
 	"github.com/easyspace-ai/luckdb/server/internal/events"
 	infraRepository "github.com/easyspace-ai/luckdb/server/internal/infrastructure/repository"
 	"github.com/easyspace-ai/luckdb/server/internal/sharedb"
@@ -47,8 +49,10 @@ type RecordService struct {
 	businessEvents     events.BusinessEventPublisher // ✨ 业务事件发布器
 	typecastService    *TypecastService              // ✅ Phase 2: 类型转换和验证
 	hookService        *HookService                  // ✨ 钩子服务
-	shareDBService     *sharedb.ShareDBService       // ✨ ShareDB 实时协作服务
-	logger             *zap.Logger                   // ✨ 日志记录器
+	shareDBService        *sharedb.ShareDBService       // ✨ ShareDB 实时协作服务
+	linkService           *tableService.LinkService     // ✨ Link 字段服务
+	linkTitleUpdateService *LinkTitleUpdateService      // ✨ Link 字段标题更新服务
+	logger                *zap.Logger                  // ✨ 日志记录器
 }
 
 // Broadcaster WebSocket广播器接口
@@ -68,17 +72,21 @@ func NewRecordService(
 	businessEvents events.BusinessEventPublisher,
 	typecastService *TypecastService,
 	shareDBService *sharedb.ShareDBService,
+	linkService *tableService.LinkService,
+	linkTitleUpdateService *LinkTitleUpdateService,
 ) *RecordService {
 	return &RecordService{
-		recordRepo:         recordRepo,
-		fieldRepo:          fieldRepo,
-		tableRepo:          tableRepo,
-		calculationService: calculationService,
-		broadcaster:        broadcaster,
-		businessEvents:     businessEvents,
-		typecastService:    typecastService,
-		shareDBService:     shareDBService,
-		logger:             logger.Logger,
+		recordRepo:            recordRepo,
+		fieldRepo:             fieldRepo,
+		tableRepo:             tableRepo,
+		calculationService:    calculationService,
+		broadcaster:           broadcaster,
+		businessEvents:        businessEvents,
+		typecastService:       typecastService,
+		shareDBService:        shareDBService,
+		linkService:           linkService,
+		linkTitleUpdateService: linkTitleUpdateService,
+		logger:                logger.Logger,
 	}
 }
 
@@ -240,13 +248,28 @@ func (s *RecordService) CreateRecord(ctx context.Context, req dto.CreateRecordRe
 func (s *RecordService) GetRecord(ctx context.Context, tableID, recordID string) (*dto.RecordResponse, error) {
 	id := valueobject.NewRecordID(recordID)
 
+	logger.Info("GetRecord: 开始查询记录",
+		logger.String("table_id", tableID),
+		logger.String("record_id", recordID))
+
 	record, err := s.recordRepo.FindByTableAndID(ctx, tableID, id)
 	if err != nil {
+		logger.Error("GetRecord: 查找记录失败",
+			logger.String("table_id", tableID),
+			logger.String("record_id", recordID),
+			logger.ErrorField(err))
 		return nil, pkgerrors.ErrDatabaseOperation.WithDetails(fmt.Sprintf("查找记录失败: %v", err))
 	}
 	if record == nil {
+		logger.Warn("GetRecord: 记录不存在",
+			logger.String("table_id", tableID),
+			logger.String("record_id", recordID))
 		return nil, pkgerrors.ErrNotFound.WithDetails("记录不存在")
 	}
+
+	logger.Info("GetRecord: 查询记录成功",
+		logger.String("table_id", tableID),
+		logger.String("record_id", recordID))
 
 	return dto.FromRecordEntity(record), nil
 }
@@ -338,22 +361,120 @@ func (s *RecordService) UpdateRecord(ctx context.Context, tableID, recordID stri
 			}
 		}
 
-		// 3. 识别变化的字段（用于智能重算）
-		oldData := record.Data().ToMap()
-		changedFieldIDs := s.identifyChangedFields(oldData, updateData)
+		// 3. ✅ 关键修复：将字段名转换为字段ID（如果请求数据使用字段名）
+		// 因为 record 数据使用字段ID作为键，而请求可能使用字段名
+		logger.Info("🔵 开始字段名转换",
+			logger.String("table_id", tableID),
+			logger.String("record_id", recordID),
+			logger.Any("update_data", updateData))
+		convertedUpdateData, err := s.convertFieldNamesToIDs(txCtx, tableID, updateData)
+		if err != nil {
+			logger.Warn("字段名转换失败，使用原始数据",
+				logger.String("table_id", tableID),
+				logger.String("record_id", recordID),
+				logger.ErrorField(err))
+			convertedUpdateData = updateData // 如果转换失败，使用原始数据
+		} else {
+			logger.Info("✅ 字段名转换完成",
+				logger.String("table_id", tableID),
+				logger.String("record_id", recordID),
+				logger.Any("converted_data", convertedUpdateData))
+		}
 
-		// 4. 创建新数据
-		newData, err := valueobject.NewRecordData(updateData)
+		// 4. ✅ 关键修复：清理 record.data 中的冗余键（字段名或字段ID）
+		// 在合并前清理，确保不会同时存在字段名和字段ID
+		oldData := record.Data().ToMap()
+		logger.Info("🔵 开始清理冗余键",
+			logger.String("table_id", tableID),
+			logger.String("record_id", recordID),
+			logger.Int("old_data_keys", len(oldData)),
+			logger.Int("new_data_keys", len(convertedUpdateData)))
+		
+		cleanedOldData, err := s.cleanRedundantKeys(txCtx, tableID, oldData, convertedUpdateData)
+		if err != nil {
+			logger.Warn("清理冗余键失败，使用原始数据",
+				logger.String("table_id", tableID),
+				logger.String("record_id", recordID),
+				logger.ErrorField(err))
+			cleanedOldData = oldData // 如果清理失败，使用原始数据
+		} else {
+			logger.Info("✅ 清理冗余键完成",
+				logger.String("table_id", tableID),
+				logger.String("record_id", recordID),
+				logger.Int("old_data_keys", len(oldData)),
+				logger.Int("cleaned_data_keys", len(cleanedOldData)))
+			
+			// 如果清理了数据，需要更新 record.data
+			if len(cleanedOldData) != len(oldData) {
+				cleanedRecordData, err := valueobject.NewRecordData(cleanedOldData)
+				if err != nil {
+					logger.Warn("创建清理后的记录数据失败，使用原始数据",
+						logger.String("table_id", tableID),
+						logger.String("record_id", recordID),
+						logger.ErrorField(err))
+				} else {
+					// 更新 record 的数据（不递增版本号，因为这只是清理操作）
+					record = entity.ReconstructRecord(
+						record.ID(),
+						record.TableID(),
+						cleanedRecordData,
+						record.Version(),
+						record.CreatedBy(),
+						record.UpdatedBy(),
+						record.CreatedAt(),
+						record.UpdatedAt(),
+						record.DeletedAt(),
+					)
+					logger.Info("✅ 已更新 record.data（清理冗余键后）",
+						logger.String("table_id", tableID),
+						logger.String("record_id", recordID))
+				}
+			}
+		}
+
+		// 5. 识别变化的字段（用于智能重算）
+		// 使用清理后的数据进行比较
+		changedFieldIDs := s.identifyChangedFields(cleanedOldData, convertedUpdateData)
+
+		// 6. 创建新数据
+		newData, err := valueobject.NewRecordData(convertedUpdateData)
 		if err != nil {
 			return pkgerrors.ErrValidationFailed.WithDetails(fmt.Sprintf("记录数据无效: %v", err))
 		}
 
-		// 5. 更新记录（会递增版本号）
+		// 7. 更新记录（会递增版本号）
 		if err := record.Update(newData, userID); err != nil {
 			return pkgerrors.ErrValidationFailed.WithDetails(fmt.Sprintf("更新记录失败: %v", err))
 		}
 
-		// 6. ✨ 智能重算受影响的虚拟字段（在事务内，保存之前）
+		// 8. ✨ 处理 Link 字段变更（在事务内，保存之前）
+		if s.linkService != nil {
+			linkCellContexts := s.extractLinkCellContexts(tableID, recordID, oldData, convertedUpdateData)
+			if len(linkCellContexts) > 0 {
+				derivation, err := s.linkService.GetDerivateByLink(txCtx, tableID, linkCellContexts)
+				if err != nil {
+					logger.Error("Link 字段处理失败（回滚事务）",
+						logger.String("record_id", recordID),
+						logger.ErrorField(err))
+					return err
+				}
+				if derivation != nil {
+					// 应用 Link 字段的衍生变更
+					for _, cellChange := range derivation.CellChanges {
+						// TODO: 更新记录中的对称字段值
+						logger.Debug("Link 字段衍生变更",
+							logger.String("table_id", cellChange.TableID),
+							logger.String("record_id", cellChange.RecordID),
+							logger.String("field_id", cellChange.FieldID))
+					}
+				}
+				logger.Info("Link 字段处理成功（事务中）✨",
+					logger.String("record_id", recordID),
+					logger.Int("link_changes", len(linkCellContexts)))
+			}
+		}
+
+		// 7. ✨ 智能重算受影响的虚拟字段（在事务内，保存之前）
 		if s.calculationService != nil && len(changedFieldIDs) > 0 {
 			if err := s.calculationService.CalculateAffectedFields(txCtx, record, changedFieldIDs); err != nil {
 				logger.Error("受影响字段重算失败（回滚事务）",
@@ -367,7 +488,7 @@ func (s *RecordService) UpdateRecord(ctx context.Context, tableID, recordID stri
 				logger.Int("changed_fields", len(changedFieldIDs)))
 		}
 
-		// 7. 保存（在事务中，包含计算后的字段）
+		// 8. 保存（在事务中，包含计算后的字段）
 		// 注意：record.Update()已经递增了版本，但Save会用旧版本做乐观锁检查
 		if err := s.recordRepo.Save(txCtx, record); err != nil {
 			return pkgerrors.ErrDatabaseOperation.WithDetails(fmt.Sprintf("保存记录失败: %v", err))
@@ -375,7 +496,7 @@ func (s *RecordService) UpdateRecord(ctx context.Context, tableID, recordID stri
 
 		logger.Info("记录更新成功（事务中）", logger.String("record_id", recordID))
 
-		// 8. ✅ 收集事件（不立即发送）
+		// 9. ✅ 收集事件（不立即发送）
 		finalFields = record.Data().ToMap()
 		event := &database.RecordEvent{
 			EventType:  "record.update",
@@ -388,10 +509,87 @@ func (s *RecordService) UpdateRecord(ctx context.Context, tableID, recordID stri
 		}
 		database.AddEventToTx(txCtx, event)
 
-		// 9. ✨ 添加事务提交后回调（发布 WebSocket 事件）
+		// 10. ✨ 添加事务提交后回调（发布 WebSocket 事件）
 		database.AddTxCallback(txCtx, func() {
 			s.publishRecordEvent(event)
 		})
+
+		// 11. ✨ 添加事务提交后回调（更新 Link 字段标题）
+		// ✅ 关键修复：无论是否更新了 Link 字段，只要更新了源记录，都应该检查是否有其他记录引用它
+		// 因为源记录的字段值可能已经改变，需要更新引用它的 Link 字段的 title
+		if s.linkTitleUpdateService != nil {
+			// ✅ 验证事务上下文
+			txContext := database.GetTxContext(txCtx)
+			if txContext == nil {
+				logger.Warn("⚠️ 不在事务上下文中，Link 字段标题更新回调可能无法执行",
+					logger.String("table_id", tableID),
+					logger.String("record_id", recordID))
+			} else {
+				logger.Info("✅ 事务上下文验证成功，准备注册 Link 字段标题更新回调",
+					logger.String("table_id", tableID),
+					logger.String("record_id", recordID),
+					logger.String("tx_id", txContext.ID))
+			}
+			
+			// 记录回调注册
+			logger.Info("🔧 正在注册 Link 字段标题更新回调",
+				logger.String("table_id", tableID),
+				logger.String("record_id", recordID))
+			
+			// ✅ 关键修复：在事务提交后，重新从数据库查询最新的记录数据
+			// 因为 record 对象可能包含的是更新前的数据，或者数据格式不完整
+			database.AddTxCallback(txCtx, func() {
+				// ✅ 添加调试日志：记录回调执行
+				logger.Info("🔵 开始执行 Link 字段标题更新回调",
+					logger.String("table_id", tableID),
+					logger.String("record_id", recordID))
+				
+				// ✅ 关键修复：在事务提交后，重新从数据库查询最新的记录数据
+				// 确保获取到最新的字段值
+				ctx := context.Background()
+				recordIDVO := valueobject.NewRecordID(recordID)
+				latestRecord, err := s.recordRepo.FindByTableAndID(ctx, tableID, recordIDVO)
+				if err != nil {
+					logger.Error("重新查询记录失败，使用原始记录数据",
+						logger.String("table_id", tableID),
+						logger.String("record_id", recordID),
+						logger.ErrorField(err))
+					latestRecord = record // 如果查询失败，使用原始记录
+				} else if latestRecord == nil {
+					logger.Warn("重新查询记录为空，使用原始记录数据",
+						logger.String("table_id", tableID),
+						logger.String("record_id", recordID))
+					latestRecord = record // 如果查询为空，使用原始记录
+				} else {
+					logger.Info("✅ 重新查询记录成功，使用最新记录数据",
+						logger.String("table_id", tableID),
+						logger.String("record_id", recordID),
+						logger.Any("latest_record_data", latestRecord.Data().ToMap()))
+				}
+				
+				// 在事务提交后更新 Link 字段的 title
+				if err := s.linkTitleUpdateService.UpdateLinkTitlesForRecord(
+					ctx,
+					tableID,
+					recordID,
+					latestRecord, // ✅ 使用最新查询的记录
+				); err != nil {
+					logger.Error("❌ 更新 Link 字段标题失败",
+						logger.String("table_id", tableID),
+						logger.String("record_id", recordID),
+						logger.ErrorField(err))
+					// 不中断主流程，只记录错误
+				} else {
+					logger.Info("✅ Link 字段标题更新回调执行成功",
+						logger.String("table_id", tableID),
+						logger.String("record_id", recordID))
+				}
+			})
+		} else {
+			logger.Warn("⚠️ linkTitleUpdateService 为 nil，跳过 Link 字段标题更新",
+				logger.String("table_id", tableID),
+				logger.String("record_id", recordID))
+		}
 
 		return nil
 	})
@@ -404,6 +602,70 @@ func (s *RecordService) UpdateRecord(ctx context.Context, tableID, recordID stri
 		logger.String("record_id", recordID))
 
 	return dto.FromRecordEntity(record), nil
+}
+
+// extractLinkCellContexts 提取 Link 字段的变更上下文
+func (s *RecordService) extractLinkCellContexts(
+	tableID string,
+	recordID string,
+	oldData map[string]interface{},
+	newData map[string]interface{},
+) []tableService.LinkCellContext {
+	contexts := make([]tableService.LinkCellContext, 0)
+
+	// 收集所有变更的字段
+	allFieldIDs := make(map[string]bool)
+	for fieldID := range oldData {
+		allFieldIDs[fieldID] = true
+	}
+	for fieldID := range newData {
+		allFieldIDs[fieldID] = true
+	}
+
+	// 检查每个字段是否为 Link 字段
+	for fieldID := range allFieldIDs {
+		oldValue := oldData[fieldID]
+		newValue := newData[fieldID]
+
+		// 检查值是否变化
+		if s.isLinkCellValue(oldValue) || s.isLinkCellValue(newValue) {
+			contexts = append(contexts, tableService.LinkCellContext{
+				RecordID: recordID,
+				FieldID:  fieldID,
+				OldValue: oldValue,
+				NewValue: newValue,
+			})
+		}
+	}
+
+	return contexts
+}
+
+// isLinkCellValue 判断是否为 Link 单元格值
+func (s *RecordService) isLinkCellValue(value interface{}) bool {
+	if value == nil {
+		return false
+	}
+
+	// 检查是否为单个 LinkCellValue
+	if m, ok := value.(map[string]interface{}); ok {
+		if id, exists := m["id"]; exists && id != nil {
+			return true
+		}
+	}
+
+	// 检查是否为 LinkCellValue 数组
+	if arr, ok := value.([]interface{}); ok {
+		for _, item := range arr {
+			if m, ok := item.(map[string]interface{}); ok {
+				if id, exists := m["id"]; exists && id != nil {
+					return true
+				}
+			}
+		}
+	}
+
+	return false
 }
 
 // validateRequiredFields 验证必填字段
@@ -457,6 +719,141 @@ func (s *RecordService) validateRequiredFields(ctx context.Context, tableID stri
 	return nil
 }
 
+// convertFieldNamesToIDs 将字段名转换为字段ID
+// 如果 updateData 中的键是字段名（如 "name"），则转换为字段ID（如 "fld_xxx"）
+// 如果已经是字段ID，则保持不变
+// 增强版：添加更详细的日志，确保转换过程可追踪
+func (s *RecordService) convertFieldNamesToIDs(ctx context.Context, tableID string, updateData map[string]interface{}) (map[string]interface{}, error) {
+	if updateData == nil || len(updateData) == 0 {
+		logger.Info("convertFieldNamesToIDs: 输入数据为空，直接返回",
+			logger.String("table_id", tableID))
+		return updateData, nil
+	}
+
+	logger.Info("🔵 convertFieldNamesToIDs: 开始字段名转换",
+		logger.String("table_id", tableID),
+		logger.Int("input_keys_count", len(updateData)),
+		logger.Any("input_keys", func() []string {
+			keys := make([]string, 0, len(updateData))
+			for k := range updateData {
+				keys = append(keys, k)
+			}
+			return keys
+		}()))
+
+	// 检查键的类型（字段名还是字段ID）
+	fieldIDKeys := make([]string, 0)
+	fieldNameKeys := make([]string, 0)
+	unknownKeys := make([]string, 0)
+	
+	for key := range updateData {
+		if strings.HasPrefix(key, "fld_") {
+			fieldIDKeys = append(fieldIDKeys, key)
+		} else {
+			fieldNameKeys = append(fieldNameKeys, key)
+		}
+	}
+
+	logger.Info("🔵 convertFieldNamesToIDs: 键类型分析",
+		logger.String("table_id", tableID),
+		logger.Int("field_id_keys_count", len(fieldIDKeys)),
+		logger.Strings("field_id_keys", fieldIDKeys),
+		logger.Int("field_name_keys_count", len(fieldNameKeys)),
+		logger.Strings("field_name_keys", fieldNameKeys),
+		logger.Int("unknown_keys_count", len(unknownKeys)),
+		logger.Strings("unknown_keys", unknownKeys))
+
+	// 如果所有键都是字段ID格式，直接返回
+	if len(fieldIDKeys) > 0 && len(fieldNameKeys) == 0 {
+		logger.Info("✅ convertFieldNamesToIDs: 所有键都是字段ID格式，无需转换",
+			logger.String("table_id", tableID),
+			logger.Int("field_id_keys_count", len(fieldIDKeys)))
+		return updateData, nil
+	}
+
+	// 如果存在字段名，需要转换
+	if len(fieldNameKeys) > 0 {
+		// 获取表的所有字段
+		logger.Info("🔵 convertFieldNamesToIDs: 获取字段列表",
+			logger.String("table_id", tableID))
+		
+		fields, err := s.fieldRepo.FindByTableID(ctx, tableID)
+		if err != nil {
+			logger.Error("❌ convertFieldNamesToIDs: 获取字段列表失败",
+				logger.String("table_id", tableID),
+				logger.ErrorField(err))
+			return nil, fmt.Errorf("获取字段列表失败: %w", err)
+		}
+
+		logger.Info("🔵 convertFieldNamesToIDs: 字段列表获取成功",
+			logger.String("table_id", tableID),
+			logger.Int("fields_count", len(fields)))
+
+		// 构建字段名到字段ID的映射
+		nameToID := make(map[string]string)
+		for _, field := range fields {
+			fieldName := field.Name().String()
+			fieldID := field.ID().String()
+			nameToID[fieldName] = fieldID
+		}
+
+		logger.Info("🔵 convertFieldNamesToIDs: 字段映射构建完成",
+			logger.String("table_id", tableID),
+			logger.Int("name_to_id_mapping_count", len(nameToID)))
+
+		// 转换字段名为字段ID
+		convertedData := make(map[string]interface{})
+		convertedCount := 0
+		notFoundKeys := make([]string, 0)
+		
+		// 先处理字段ID键（直接复制）
+		for _, key := range fieldIDKeys {
+			convertedData[key] = updateData[key]
+		}
+		
+		// 再处理字段名键（需要转换）
+		for _, key := range fieldNameKeys {
+			value := updateData[key]
+			// 如果是字段名，转换为字段ID
+			if fieldID, exists := nameToID[key]; exists {
+				convertedData[fieldID] = value
+				convertedCount++
+				logger.Info("✅ convertFieldNamesToIDs: 字段名转换为字段ID",
+					logger.String("table_id", tableID),
+					logger.String("field_name", key),
+					logger.String("field_id", fieldID),
+					logger.Any("value", value))
+			} else {
+				// 如果找不到对应的字段ID，可能是字段不存在
+				// 保持原样，让后续逻辑处理
+				convertedData[key] = value
+				notFoundKeys = append(notFoundKeys, key)
+				logger.Warn("⚠️ convertFieldNamesToIDs: 字段名未找到对应字段ID，保持原样",
+					logger.String("table_id", tableID),
+					logger.String("key", key),
+					logger.Any("value", value))
+			}
+		}
+
+		logger.Info("✅ convertFieldNamesToIDs: 字段名转换完成",
+			logger.String("table_id", tableID),
+			logger.Int("input_count", len(updateData)),
+			logger.Int("converted_count", convertedCount),
+			logger.Int("not_found_count", len(notFoundKeys)),
+			logger.Strings("not_found_keys", notFoundKeys),
+			logger.Int("output_count", len(convertedData)),
+			logger.Any("converted_data", convertedData))
+
+		return convertedData, nil
+	}
+
+	// 如果所有键都是未知格式，直接返回
+	logger.Warn("⚠️ convertFieldNamesToIDs: 所有键都是未知格式，保持原样",
+		logger.String("table_id", tableID),
+		logger.Int("unknown_keys_count", len(unknownKeys)))
+	return updateData, nil
+}
+
 // identifyChangedFields 识别变化的字段ID列表
 func (s *RecordService) identifyChangedFields(oldData map[string]interface{}, newData map[string]interface{}) []string {
 	changed := make([]string, 0)
@@ -479,6 +876,87 @@ func (s *RecordService) isValueEqual(a, b interface{}) bool {
 	// 简化比较：使用fmt.Sprintf转字符串比较
 	// 实际项目中可以使用reflect.DeepEqual或更精确的比较
 	return fmt.Sprintf("%v", a) == fmt.Sprintf("%v", b)
+}
+
+// cleanRedundantKeys 清理冗余的字段名/字段ID键
+// 如果新数据使用字段ID，删除旧数据中对应的字段名
+// 如果新数据使用字段名，删除旧数据中对应的字段ID
+// 返回清理后的数据映射
+func (s *RecordService) cleanRedundantKeys(
+	ctx context.Context,
+	tableID string,
+	oldData map[string]interface{},
+	newData map[string]interface{},
+) (map[string]interface{}, error) {
+	if oldData == nil || len(oldData) == 0 {
+		return oldData, nil
+	}
+
+	// 获取表的所有字段，构建字段名和字段ID的映射
+	fields, err := s.fieldRepo.FindByTableID(ctx, tableID)
+	if err != nil {
+		return nil, fmt.Errorf("获取字段列表失败: %w", err)
+	}
+
+	// 构建字段名到字段ID的映射
+	nameToID := make(map[string]string)
+	// 构建字段ID到字段名的映射
+	idToName := make(map[string]string)
+	for _, field := range fields {
+		fieldName := field.Name().String()
+		fieldID := field.ID().String()
+		nameToID[fieldName] = fieldID
+		idToName[fieldID] = fieldName
+	}
+
+	// 创建清理后的数据副本
+	cleanedData := make(map[string]interface{})
+	for k, v := range oldData {
+		cleanedData[k] = v
+	}
+
+	// 统计清理的键
+	cleanedKeys := make([]string, 0)
+
+	// 检查新数据使用的键类型
+	for newKey := range newData {
+		// 如果新数据使用字段ID（fld_开头）
+		if strings.HasPrefix(newKey, "fld_") {
+			// 删除旧数据中对应的字段名
+			if fieldName, exists := idToName[newKey]; exists {
+				if _, hasFieldName := cleanedData[fieldName]; hasFieldName {
+					delete(cleanedData, fieldName)
+					cleanedKeys = append(cleanedKeys, fieldName)
+					logger.Info("清理冗余键：删除字段名（新数据使用字段ID）",
+						logger.String("field_id", newKey),
+						logger.String("field_name", fieldName))
+				}
+			}
+		} else {
+			// 如果新数据使用字段名
+			// 删除旧数据中对应的字段ID
+			if fieldID, exists := nameToID[newKey]; exists {
+				if _, hasFieldID := cleanedData[fieldID]; hasFieldID {
+					delete(cleanedData, fieldID)
+					cleanedKeys = append(cleanedKeys, fieldID)
+					logger.Info("清理冗余键：删除字段ID（新数据使用字段名）",
+						logger.String("field_name", newKey),
+						logger.String("field_id", fieldID))
+				}
+			}
+		}
+	}
+
+	if len(cleanedKeys) > 0 {
+		logger.Info("✅ 清理冗余键完成",
+			logger.String("table_id", tableID),
+			logger.Int("cleaned_count", len(cleanedKeys)),
+			logger.Strings("cleaned_keys", cleanedKeys),
+			logger.Int("old_data_keys", len(oldData)),
+			logger.Int("cleaned_data_keys", len(cleanedData)))
+	}
+
+	return cleanedData, nil
 }
 
 // DeleteRecord 删除记录 ✨ 事务版
@@ -661,49 +1139,138 @@ func (s *RecordService) BatchCreateRecords(ctx context.Context, tableID string, 
 }
 
 // BatchUpdateRecords 批量更新记录（严格遵守：返回AppError）
+// ✨ 修复：使用事务并调用 UpdateLinkTitlesForRecord
 func (s *RecordService) BatchUpdateRecords(ctx context.Context, tableID string, req dto.BatchUpdateRecordRequest, userID string) (*dto.BatchUpdateRecordResponse, error) {
 	successRecords := make([]*dto.RecordResponse, 0, len(req.Records))
 	errorsList := make([]string, 0)
 
-	// 遍历每条记录进行更新
-	for i, item := range req.Records {
-		// 查找记录（使用 tableID）
-		id := valueobject.NewRecordID(item.ID)
-		records, err := s.recordRepo.FindByIDs(ctx, tableID, []valueobject.RecordID{id})
-		if err != nil {
-			errorsList = append(errorsList, fmt.Sprintf("记录%s查找失败: %v", item.ID, err))
-			continue
-		}
-		if len(records) == 0 {
-			errorsList = append(errorsList, fmt.Sprintf("记录%s不存在", item.ID))
-			continue
-		}
-		record := records[0]
+	// ✨ 使用事务批量更新，确保每条记录都触发 Link 字段更新
+	// 获取数据库连接（从 recordRepo 获取，支持 CachedRecordRepository）
+	var db *gorm.DB
+	if cachedRepo, ok := s.recordRepo.(*infraRepository.CachedRecordRepository); ok {
+		// 如果是 CachedRecordRepository，获取底层的数据库连接
+		db = cachedRepo.GetDB()
+	} else if dynamicRepo, ok := s.recordRepo.(*infraRepository.RecordRepositoryDynamic); ok {
+		// 如果是 RecordRepositoryDynamic，直接获取数据库连接
+		db = dynamicRepo.GetDB()
+	} else {
+		// 如果都不支持，返回错误
+		return nil, pkgerrors.ErrDatabaseOperation.WithDetails("无法获取数据库连接")
+	}
+	
+	// ✨ 使用事务批量更新，确保每条记录都触发 Link 字段更新
+	// 注意：批量更新时，即使某些记录失败，也要继续处理其他记录
+	// 因此，我们需要在事务中捕获错误，但不中断事务
+	err := database.Transaction(ctx, db, nil, func(txCtx context.Context) error {
+		// 遍历每条记录进行更新
+		for i, item := range req.Records {
+			// 查找记录（使用 tableID）
+			id := valueobject.NewRecordID(item.ID)
+			records, findErr := s.recordRepo.FindByIDs(txCtx, tableID, []valueobject.RecordID{id})
+			if findErr != nil {
+				logger.Warn("批量更新：记录查找失败",
+					logger.String("table_id", tableID),
+					logger.String("record_id", item.ID),
+					logger.ErrorField(findErr))
+				errorsList = append(errorsList, fmt.Sprintf("记录%s查找失败: %v", item.ID, findErr))
+				continue
+			}
+			if len(records) == 0 {
+				logger.Warn("批量更新：记录不存在",
+					logger.String("table_id", tableID),
+					logger.String("record_id", item.ID))
+				errorsList = append(errorsList, fmt.Sprintf("记录%s不存在", item.ID))
+				continue
+			}
+			record := records[0]
 
-		// 创建新数据
-		newData, err := valueobject.NewRecordData(item.Fields)
-		if err != nil {
-			errorsList = append(errorsList, fmt.Sprintf("记录%d数据无效: %v", i+1, err))
-			continue
+			// 创建新数据
+			newData, dataErr := valueobject.NewRecordData(item.Fields)
+			if dataErr != nil {
+				logger.Warn("批量更新：记录数据无效",
+					logger.String("table_id", tableID),
+					logger.String("record_id", item.ID),
+					logger.ErrorField(dataErr))
+				errorsList = append(errorsList, fmt.Sprintf("记录%d数据无效: %v", i+1, dataErr))
+				continue
+			}
+
+			// 更新记录
+			if updateErr := record.Update(newData, userID); updateErr != nil {
+				logger.Warn("批量更新：记录更新失败",
+					logger.String("table_id", tableID),
+					logger.String("record_id", item.ID),
+					logger.ErrorField(updateErr))
+				errorsList = append(errorsList, fmt.Sprintf("记录%s更新失败: %v", item.ID, updateErr))
+				continue
+			}
+
+			// 保存（在事务中）
+			// 注意：如果保存失败，这会导致事务回滚，所以我们需要捕获错误
+			if saveErr := s.recordRepo.Save(txCtx, record); saveErr != nil {
+				logger.Error("批量更新：记录保存失败（将导致事务回滚）",
+					logger.String("table_id", tableID),
+					logger.String("record_id", item.ID),
+					logger.ErrorField(saveErr))
+				errorsList = append(errorsList, fmt.Sprintf("记录%s保存失败: %v", item.ID, saveErr))
+				// 保存失败会导致事务回滚，但我们仍然记录错误并继续处理
+				// 注意：如果这里返回错误，整个事务会回滚
+				// 为了批量更新的容错性，我们继续处理，但最终如果所有记录都失败，事务会回滚
+				continue
+			}
+
+			// ✨ 添加事务提交后回调（更新 Link 字段标题）
+			if s.linkTitleUpdateService != nil {
+				recordID := record.ID().String()
+				database.AddTxCallback(txCtx, func() {
+					// 在事务提交后更新 Link 字段的 title
+					if err := s.linkTitleUpdateService.UpdateLinkTitlesForRecord(
+						context.Background(), // 使用新的 context，因为事务已提交
+						tableID,
+						recordID,
+						record,
+					); err != nil {
+						logger.Error("批量更新时更新 Link 字段标题失败",
+							logger.String("table_id", tableID),
+							logger.String("record_id", recordID),
+							logger.ErrorField(err))
+						// 不中断主流程，只记录错误
+					}
+				})
+			}
+
+			// 添加到成功列表
+			successRecords = append(successRecords, dto.FromRecordEntity(record))
 		}
 
-		// 更新记录
-		if err := record.Update(newData, userID); err != nil {
-			errorsList = append(errorsList, fmt.Sprintf("记录%s更新失败: %v", item.ID, err))
-			continue
+		// 如果所有记录都失败了，返回错误以触发回滚
+		// 否则，即使部分记录失败，也提交事务（部分成功）
+		if len(successRecords) == 0 && len(errorsList) > 0 {
+			logger.Error("批量更新：所有记录都失败，事务将回滚",
+				logger.String("table_id", tableID),
+				logger.Int("total", len(req.Records)),
+				logger.Int("failed", len(errorsList)))
+			return fmt.Errorf("所有记录更新失败: %v", errorsList[0])
 		}
 
-		// 保存
-		if err := s.recordRepo.Save(ctx, record); err != nil {
-			errorsList = append(errorsList, fmt.Sprintf("记录%s保存失败: %v", item.ID, err))
-			continue
-		}
+		// 部分成功或全部成功，提交事务
+		logger.Info("批量更新：事务将提交",
+			logger.String("table_id", tableID),
+			logger.Int("total", len(req.Records)),
+			logger.Int("success", len(successRecords)),
+			logger.Int("failed", len(errorsList)))
+		return nil
+	})
 
-		// 添加到成功列表
-		successRecords = append(successRecords, dto.FromRecordEntity(record))
+	if err != nil {
+		logger.Error("批量更新记录事务失败",
+			logger.String("table_id", tableID),
+			logger.ErrorField(err))
+		return nil, pkgerrors.ErrDatabaseOperation.WithDetails(fmt.Sprintf("批量更新记录失败: %v", err))
 	}
 
 	logger.Info("批量更新记录完成",
+		logger.String("table_id", tableID),
 		logger.Int("total", len(req.Records)),
 		logger.Int("success", len(successRecords)),
 		logger.Int("failed", len(errorsList)),
@@ -807,9 +1374,10 @@ func (s *RecordService) publishRecordEvent(event *database.RecordEvent) {
 		operations := make([]sharedb.OTOperation, 0)
 
 		// 为每个字段变化创建 OT 操作
+		// 注意：ShareDB 文档结构是 { data: { fieldId: value } }，所以路径应该是 ["data", fieldId]
 		for fieldId, fieldValue := range event.Fields {
 			operation := sharedb.OTOperation{
-				"p":  []interface{}{"fields", fieldId}, // path: ["fields", fieldId] - 修复路径格式
+				"p":  []interface{}{"data", fieldId}, // path: ["data", fieldId] - 与前端 submitFieldUpdate 保持一致
 				"oi": fieldValue,                       // object insert: new value
 			}
 			operations = append(operations, operation)

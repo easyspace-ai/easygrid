@@ -49,46 +49,91 @@ func (s *LinkService) GetAffectedRecordsByLink(
 	fieldID string,
 	recordIDs []string,
 ) (map[string][]string, error) {
+	// 入口参数日志
+	s.logger.Info("GetAffectedRecordsByLink: 入参",
+		zap.String("table_id", tableID),
+		zap.String("field_id", fieldID),
+		zap.Int("record_ids_count", len(recordIDs)),
+		zap.Any("record_ids", recordIDs),
+	)
 	if len(recordIDs) == 0 {
+		s.logger.Info("GetAffectedRecordsByLink: 记录ID为空，直接返回空结果",
+			zap.String("table_id", tableID))
 		return make(map[string][]string), nil
 	}
 
 	// 查询哪些表有Link字段指向当前表
 	linkFields, err := s.fieldRepo.FindLinkFieldsToTable(ctx, tableID)
 	if err != nil {
+		s.logger.Error("Failed to find link fields",
+			zap.String("table_id", tableID),
+			zap.Error(err),
+		)
 		return nil, fmt.Errorf("failed to find link fields: %w", err)
+	}
+	
+	s.logger.Info("查找指向表的 Link 字段",
+		zap.String("table_id", tableID),
+		zap.Int("link_fields_count", len(linkFields)),
+	)
+	
+	if len(linkFields) == 0 {
+		s.logger.Info("没有找到指向该表的 Link 字段",
+			zap.String("table_id", tableID),
+		)
+		return make(map[string][]string), nil
 	}
 
 	affectedRecords := make(map[string][]string)
 
 	for _, linkField := range linkFields {
 		// 查询链接到这些记录的目标记录
+		targetTableID := linkField.TableID()
+		linkFieldID := linkField.ID().String()
+		
+		s.logger.Info("查找引用记录的 Link 字段值",
+			zap.String("link_field_id", linkFieldID),
+			zap.String("target_table_id", targetTableID),
+			zap.String("source_table_id", tableID),
+			zap.Int("record_ids_count", len(recordIDs)),
+		)
+		
 		linkedRecords, err := s.recordRepo.FindRecordsByLinkValue(
 			ctx,
-			linkField.TableID(),
-			linkField.ID().String(),
+			targetTableID,
+			linkFieldID,
 			recordIDs,
 		)
 		if err != nil {
 			s.logger.Error("Failed to find records by link value",
-				zap.String("link_field_id", linkField.ID().String()),
+				zap.String("link_field_id", linkFieldID),
+				zap.String("target_table_id", targetTableID),
 				zap.Error(err),
 			)
 			continue
 		}
 
+		s.logger.Info("找到引用记录的记录",
+			zap.String("link_field_id", linkFieldID),
+			zap.String("target_table_id", targetTableID),
+			zap.Int("linked_records_count", len(linkedRecords)),
+			zap.Any("linked_records", linkedRecords),
+		)
+
 		if len(linkedRecords) > 0 {
-			affectedRecords[linkField.TableID()] = append(
-				affectedRecords[linkField.TableID()],
+			affectedRecords[targetTableID] = append(
+				affectedRecords[targetTableID],
 				linkedRecords...,
 			)
 		}
 	}
 
-	s.logger.Debug("Found affected records by link",
+	s.logger.Info("✅ Found affected records by link",
 		zap.String("table_id", tableID),
 		zap.Int("record_count", len(recordIDs)),
+		zap.Int("link_fields_count", len(linkFields)),
 		zap.Int("affected_tables", len(affectedRecords)),
+		zap.Any("affected_tables", affectedRecords),
 	)
 
 	return affectedRecords, nil

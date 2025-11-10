@@ -1484,17 +1484,18 @@ function useDataGrid<TData>({
   }
   
   // 调试：检查 table 的 row model 是否正确计算
-  React.useEffect(() => {
-    const rows = table.getRowModel().rows;
-    console.log("[useDataGrid] table row model 状态:", {
-      dataLength: data.length,
-      dataIds: data.map((d: any) => d.id),
-      rowsLength: rows.length,
-      rowIds: rows.map(r => r.id),
-      match: rows.length === data.length,
-      tableOptionsData: tableOptions.data?.length,
-    });
-  }, [table, data, tableOptions.data]);
+  // 减少日志输出：只在开发环境或调试模式下记录
+  // React.useEffect(() => {
+  //   const rows = table.getRowModel().rows;
+  //   console.log("[useDataGrid] table row model 状态:", {
+  //     dataLength: data.length,
+  //     dataIds: data.map((d: any) => d.id),
+  //     rowsLength: rows.length,
+  //     rowIds: rows.map(r => r.id),
+  //     match: rows.length === data.length,
+  //     tableOptionsData: tableOptions.data?.length,
+  //   });
+  // }, [table, data, tableOptions.data]);
 
   // biome-ignore lint/correctness/useExhaustiveDependencies: we need to memoize the column size vars
   const columnSizeVars = React.useMemo(() => {
@@ -1516,17 +1517,18 @@ function useDataGrid<TData>({
   const rowCount = data.length;
   
   // 调试：检查 rowCount 和 table row model
-  React.useEffect(() => {
-    const tableRowCount = table.getRowModel().rows.length;
-    console.log("[useDataGrid] rowCount 状态:", {
-      dataLength: data.length,
-      dataIds: data.map((d: any) => d.id),
-      rowCount,
-      tableRowCount,
-      tableRowIds: table.getRowModel().rows.map(r => r.id),
-      match: rowCount === tableRowCount && rowCount === data.length,
-    });
-  }, [data, rowCount, table]);
+  // 减少日志输出：只在开发环境或调试模式下记录
+  // React.useEffect(() => {
+  //   const tableRowCount = table.getRowModel().rows.length;
+  //   console.log("[useDataGrid] rowCount 状态:", {
+  //     dataLength: data.length,
+  //     dataIds: data.map((d: any) => d.id),
+  //     rowCount,
+  //     tableRowCount,
+  //     tableRowIds: table.getRowModel().rows.map(r => r.id),
+  //     match: rowCount === tableRowCount && rowCount === data.length,
+  //   });
+  // }, [data, rowCount, table]);
 
   const rowVirtualizer = useVirtualizer({
     count: rowCount,

@@ -1,13 +1,18 @@
 "use client";
 
 import type { Cell, Table } from "@tanstack/react-table";
-import { Check, X, Link as LinkIcon, Mail, Phone, Star, User, Image as ImageIcon, ExternalLink, Plus, Code, Bot, Loader2, RefreshCw, AlertCircle } from "lucide-react";
+import { Check, X, Link as LinkIcon, Mail, Phone, Star, User, Image as ImageIcon, ExternalLink, Plus, Code, Bot, Loader2, RefreshCw, AlertCircle, Download, File } from "lucide-react";
 import * as React from "react";
 import { DataGridCellWrapper } from "./data-grid-cell-wrapper";
 import { useAIField } from "../../hooks/use-ai-field";
 import { Badge } from "../ui/badge";
+import { Button } from "../ui/button";
 import { Calendar } from "../ui/calendar";
 import { Checkbox } from "../ui/checkbox";
+import {
+  Dialog,
+  DialogContent,
+} from "../ui/dialog";
 import {
   Command,
   CommandEmpty,
@@ -34,6 +39,10 @@ import { useDebouncedCallback } from "../../hooks/use-debounced-callback";
 import { getLineCount } from "../../lib/data-grid";
 import { FileUploadDialog } from "./file-upload-dialog";
 import { cn } from "../../lib/utils";
+import { LinkRecordSelector } from "./link-record-selector";
+import { LinkRecordDialog } from "./link-record-dialog";
+import type { LinkCellValue } from "../../types/data-grid";
+import type { LinkFieldOptions } from "../../services/linkService";
 
 interface CellVariantProps<TData> {
   cell: Cell<TData, unknown>;
@@ -1154,7 +1163,7 @@ export function DateCell<TData>({
   );
 }
 
-// Link Cell - 链接类型
+// Link Cell - 链接类型（支持关联字段和 URL 链接）
 export function LinkCell<TData>({
   cell,
   table,
@@ -1164,11 +1173,228 @@ export function LinkCell<TData>({
   isFocused,
   isSelected,
 }: CellVariantProps<TData>) {
-  const initialValue = cell.getValue() as string;
-  const [value, setValue] = React.useState(initialValue ?? "");
-  const cellRef = React.useRef<HTMLDivElement>(null);
+  const cellOpts = cell.column.columnDef.meta?.cell;
+  const linkConfig = cellOpts?.variant === "link" ? cellOpts : null;
   const containerRef = React.useRef<HTMLDivElement>(null);
   const meta = table.options.meta;
+
+  // 检测是否为关联字段（通过 foreignTableId 判断）
+  const isLinkField = linkConfig?.foreignTableId && !linkConfig.isUrl;
+  const isUrlLink = linkConfig?.isUrl || (!linkConfig?.foreignTableId);
+
+  // 获取单元格值
+  const cellValue = cell.getValue() as LinkCellValue | LinkCellValue[] | string | null | undefined;
+
+  // 如果是关联字段，使用关联记录选择器
+  if (isLinkField && linkConfig.foreignTableId) {
+    const linkFieldOptions: LinkFieldOptions = {
+      foreignTableId: linkConfig.foreignTableId,
+      relationship: linkConfig.relationship,
+      lookupFieldId: linkConfig.lookupFieldId,
+      allowMultiple: linkConfig.allowMultiple,
+    };
+
+    // 转换单元格值为 LinkCellValue 格式
+    const linkValue: LinkCellValue | LinkCellValue[] | null = React.useMemo(() => {
+      if (cellValue === null || cellValue === undefined) {
+        return null;
+      }
+      if (typeof cellValue === "string") {
+        // 如果是字符串，可能是旧格式，尝试解析
+        try {
+          const parsed = JSON.parse(cellValue);
+          if (Array.isArray(parsed)) {
+            return parsed as LinkCellValue[];
+          }
+          if (parsed && typeof parsed === "object" && parsed.id) {
+            return parsed as LinkCellValue;
+          }
+        } catch {
+          // 解析失败，返回 null
+          return null;
+        }
+      }
+      if (Array.isArray(cellValue)) {
+        return cellValue as LinkCellValue[];
+      }
+      if (typeof cellValue === "object" && cellValue !== null && "id" in cellValue) {
+        return cellValue as LinkCellValue;
+      }
+      return null;
+    }, [cellValue]);
+
+    const handleChange = React.useCallback(
+      (value: LinkCellValue | LinkCellValue[] | null) => {
+        // 更新数据，但不停止编辑状态
+        // 这样可以在选择记录后继续选择其他记录，直到点击确认
+        meta?.onDataUpdate?.({ rowIndex, columnId, value });
+        // 注意：这里不调用 onCellEditingStop，让弹窗保持打开状态
+      },
+      [meta, rowIndex, columnId]
+    );
+
+    const onWrapperKeyDown = React.useCallback(
+      (event: React.KeyboardEvent<HTMLDivElement>) => {
+        if (isEditing) {
+          if (event.key === "Escape") {
+            event.preventDefault();
+            meta?.onCellEditingStop?.();
+          } else if (event.key === "Tab") {
+            event.preventDefault();
+            meta?.onCellEditingStop?.({
+              direction: event.shiftKey ? "left" : "right",
+            });
+          }
+        }
+      },
+      [isEditing, meta]
+    );
+
+    React.useEffect(() => {
+      if (
+        isFocused &&
+        !isEditing &&
+        !meta?.searchOpen &&
+        !meta?.isScrolling &&
+        containerRef.current
+      ) {
+        containerRef.current.focus();
+      }
+    }, [isFocused, isEditing, meta?.searchOpen, meta?.isScrolling]);
+
+    const [dialogOpen, setDialogOpen] = React.useState(false);
+    
+    // 使用 ref 标记是否应该保持弹窗打开
+    const shouldKeepDialogOpenRef = React.useRef(false);
+
+    // 当进入编辑状态时，自动打开弹窗
+    React.useEffect(() => {
+      if (isEditing && isLinkField && linkConfig.foreignTableId) {
+        // 延迟一点打开，确保编辑状态已经稳定
+        const timer = setTimeout(() => {
+          setDialogOpen(true);
+          shouldKeepDialogOpenRef.current = true;
+        }, 100);
+        return () => clearTimeout(timer);
+      } else if (!isEditing && dialogOpen) {
+        // 退出编辑状态时，只有在弹窗打开且不应该保持打开时才关闭
+        // 这样可以防止在选择记录时因为状态更新导致弹窗关闭
+        // 但是，如果 shouldKeepDialogOpenRef 为 true，说明弹窗应该保持打开
+        // 这种情况下，不要关闭弹窗，让用户继续选择
+        if (!shouldKeepDialogOpenRef.current) {
+          const timer = setTimeout(() => {
+            setDialogOpen(false);
+          }, 200);
+          return () => clearTimeout(timer);
+        } else {
+          // 如果弹窗应该保持打开，但编辑状态变为 false，可能是数据更新导致的
+          // 在这种情况下，保持弹窗打开，不要关闭
+          // 这样可以防止在选择记录时因为 onDataUpdate 导致编辑状态变化，从而关闭弹窗
+        }
+      }
+    }, [isEditing, isLinkField, linkConfig?.foreignTableId, dialogOpen]);
+    
+    // 当弹窗关闭时，如果还在编辑状态，停止编辑
+    const handleDialogOpenChange = React.useCallback(
+      (open: boolean) => {
+        setDialogOpen(open);
+        shouldKeepDialogOpenRef.current = open;
+        
+        // 只有在用户明确关闭弹窗（点击取消或确认，或点击外部区域）时才停止编辑
+        // 不要在选择记录时自动关闭弹窗
+        if (!open && isEditing) {
+          // 延迟停止编辑，确保 onChange 回调已经执行
+          // 使用更长的延迟，确保用户有足够时间点击确认
+          setTimeout(() => {
+            // 只有在弹窗确实关闭时才停止编辑
+            if (!shouldKeepDialogOpenRef.current) {
+              meta?.onCellEditingStop?.();
+            }
+          }, 300);
+        }
+      },
+      [isEditing, meta]
+    );
+
+    return (
+      <>
+        <DataGridCellWrapper
+          ref={containerRef}
+          cell={cell}
+          table={table}
+          rowIndex={rowIndex}
+          columnId={columnId}
+          isEditing={isEditing}
+          isFocused={isFocused}
+          isSelected={isSelected}
+          onKeyDown={onWrapperKeyDown}
+        >
+          {isEditing ? (
+            <div className="flex items-center gap-2 min-w-0">
+              {linkValue && (
+                <div className="flex flex-wrap gap-1">
+                  {Array.isArray(linkValue) ? (
+                    linkValue.map((record) => (
+                      <Badge key={record.id} variant="secondary" className="truncate max-w-[150px]">
+                        {record.title || record.id}
+                      </Badge>
+                    ))
+                  ) : (
+                    <Badge variant="secondary" className="truncate max-w-[150px]">
+                      {linkValue.title || linkValue.id}
+                    </Badge>
+                  )}
+                </div>
+              )}
+              {!linkValue && (
+                <span className="text-sm text-muted-foreground">点击选择记录...</span>
+              )}
+            </div>
+          ) : (
+          <div className="flex flex-wrap gap-1 min-w-0">
+            {linkValue === null || linkValue === undefined ? (
+              <span data-slot="grid-cell-content" className="text-muted-foreground">
+                未选择
+              </span>
+            ) : Array.isArray(linkValue) ? (
+              linkValue.length > 0 ? (
+                linkValue.map((record) => (
+                  <Badge
+                    key={record.id}
+                    variant="secondary"
+                    className="truncate max-w-[200px]"
+                  >
+                    {record.title || record.id}
+                  </Badge>
+                ))
+              ) : (
+                <span data-slot="grid-cell-content" className="text-muted-foreground">
+                  未选择
+                </span>
+              )
+            ) : (
+              <Badge variant="secondary" className="truncate max-w-[200px]">
+                {linkValue.title || linkValue.id}
+              </Badge>
+            )}
+          </div>
+        )}
+      </DataGridCellWrapper>
+      <LinkRecordDialog
+        open={dialogOpen}
+        onOpenChange={handleDialogOpenChange}
+        value={linkValue}
+        options={linkFieldOptions}
+        onChange={handleChange}
+      />
+    </>
+    );
+  }
+
+  // 如果是 URL 链接，使用原有实现（向后兼容）
+  const initialValue = typeof cellValue === "string" ? cellValue : "";
+  const [value, setValue] = React.useState(initialValue ?? "");
+  const cellRef = React.useRef<HTMLDivElement>(null);
 
   const isValidUrl = (url: string) => {
     if (!url) return false;
@@ -1959,6 +2185,110 @@ export function UserCell<TData>({
   );
 }
 
+// 判断文件是否是图片
+function isImageFile(fileName: string): boolean {
+  const imageExtensions = ['.jpg', '.jpeg', '.png', '.gif', '.bmp', '.webp', '.svg', '.ico'];
+  const lowerName = fileName.toLowerCase();
+  return imageExtensions.some(ext => lowerName.endsWith(ext));
+}
+
+// 附件项组件
+function AttachmentItem({
+  file,
+  isImage,
+  onFileClick,
+  onRemove,
+}: {
+  file: { name: string; url: string };
+  isImage: boolean;
+  onFileClick: (file: { name: string; url: string }, event: React.MouseEvent) => void;
+  onRemove: () => void;
+}) {
+  const [imageError, setImageError] = React.useState(false);
+
+  return (
+    <div
+      className={cn(
+        "flex items-center gap-1 rounded-md border bg-muted px-1.5 py-0.5 text-xs max-w-[100px] shrink-0",
+        isImage && "cursor-pointer hover:bg-muted/80 transition-colors"
+      )}
+      onClick={(e) => onFileClick(file, e)}
+      title={isImage ? "点击预览图片" : "点击下载文件"}
+    >
+      {isImage ? (
+        <div className="relative size-5 shrink-0 rounded overflow-hidden border bg-muted flex items-center justify-center">
+          {!imageError ? (
+            <img
+              src={file.url}
+              alt={file.name}
+              className="size-full object-cover"
+              onError={() => setImageError(true)}
+            />
+          ) : (
+            <ImageIcon className="size-3 text-muted-foreground" />
+          )}
+        </div>
+      ) : (
+        <File className="size-3 shrink-0" />
+      )}
+      <span className="truncate min-w-0 flex-1">{file.name}</span>
+      {isImage && (
+        <ImageIcon className="size-3 shrink-0 text-muted-foreground" />
+      )}
+      {!isImage && (
+        <Download className="size-3 shrink-0 text-muted-foreground" />
+      )}
+      <button
+        type="button"
+        onClick={(e) => {
+          e.stopPropagation();
+          onRemove();
+        }}
+        className="ml-1 hover:text-destructive shrink-0"
+        tabIndex={-1}
+        title="删除"
+      >
+        <X className="size-3" />
+      </button>
+    </div>
+  );
+}
+
+// 图片预览对话框
+function ImagePreviewDialog({
+  open,
+  onOpenChange,
+  imageUrl,
+  imageName,
+}: {
+  open: boolean;
+  onOpenChange: (open: boolean) => void;
+  imageUrl: string;
+  imageName: string;
+}) {
+  return (
+    <Dialog open={open} onOpenChange={onOpenChange}>
+      <DialogContent className="max-w-4xl max-h-[90vh] p-0 bg-transparent border-none">
+        <div className="relative w-full h-full flex items-center justify-center">
+          <img
+            src={imageUrl}
+            alt={imageName}
+            className="max-w-full max-h-[90vh] object-contain rounded-lg"
+            onClick={(e) => e.stopPropagation()}
+          />
+          <button
+            type="button"
+            onClick={() => onOpenChange(false)}
+            className="absolute top-4 right-4 rounded-full bg-black/50 hover:bg-black/70 text-white p-2 transition-colors"
+          >
+            <X className="size-4" />
+          </button>
+        </div>
+      </DialogContent>
+    </Dialog>
+  );
+}
+
 // Attachment Cell - 附件类型
 export function AttachmentCell<TData>({
   cell,
@@ -1971,6 +2301,7 @@ export function AttachmentCell<TData>({
   const initialValue = cell.getValue() as Array<{ name: string; url: string }>;
   const [files, setFiles] = React.useState(initialValue ?? []);
   const [dialogOpen, setDialogOpen] = React.useState(false);
+  const [previewImage, setPreviewImage] = React.useState<{ url: string; name: string } | null>(null);
   const containerRef = React.useRef<HTMLDivElement>(null);
   const meta = table.options.meta;
 
@@ -2004,6 +2335,28 @@ export function AttachmentCell<TData>({
       event.stopPropagation();
       // 打开上传弹窗
       setDialogOpen(true);
+    },
+    [],
+  );
+
+  const handleFileClick = React.useCallback(
+    (file: { name: string; url: string }, event: React.MouseEvent) => {
+      event.preventDefault();
+      event.stopPropagation();
+      
+      if (isImageFile(file.name)) {
+        // 如果是图片，显示预览
+        setPreviewImage({ url: file.url, name: file.name });
+      } else {
+        // 如果是文件，下载
+        const link = document.createElement('a');
+        link.href = file.url;
+        link.download = file.name;
+        link.target = '_blank';
+        document.body.appendChild(link);
+        link.click();
+        document.body.removeChild(link);
+      }
     },
     [],
   );
@@ -2047,44 +2400,37 @@ export function AttachmentCell<TData>({
         isSelected={isSelected}
         onClick={handleClick}
         onKeyDown={onWrapperKeyDown}
-        className="flex items-center justify-center"
+        className="flex items-center min-w-0 overflow-hidden"
       >
         {files.length === 0 ? (
           <button
             type="button"
-            className="flex items-center justify-center size-8 rounded-md border border-dashed hover:bg-accent transition-colors"
+            className="flex items-center justify-center size-8 rounded-md border border-dashed hover:bg-accent transition-colors shrink-0"
             onClick={handleClick}
             tabIndex={-1}
           >
             <Plus className="size-4 text-muted-foreground" />
           </button>
         ) : (
-          <div className="flex flex-wrap items-center gap-1 min-w-0 flex-1">
-            {files.map((file, index) => (
-              <div
-                key={index}
-                className="flex items-center gap-1 rounded-md border bg-muted px-1.5 py-0.5 text-xs max-w-[120px]"
-              >
-                <ImageIcon className="size-3 shrink-0" />
-                <span className="truncate">{file.name}</span>
-                <button
-                  type="button"
-                  onClick={(e) => {
-                    e.stopPropagation();
-                    handleFileRemove(index);
-                  }}
-                  className="ml-1 hover:text-destructive shrink-0"
-                  tabIndex={-1}
-                >
-                  <X className="size-3" />
-                </button>
-              </div>
-            ))}
+          <div className="flex flex-wrap items-center gap-1 min-w-0 w-full max-w-full overflow-hidden">
+            {files.map((file, index) => {
+              const isImage = isImageFile(file.name);
+              return (
+                <AttachmentItem
+                  key={index}
+                  file={file}
+                  isImage={isImage}
+                  onFileClick={handleFileClick}
+                  onRemove={() => handleFileRemove(index)}
+                />
+              );
+            })}
             <button
               type="button"
               className="flex items-center justify-center size-6 rounded-md border border-dashed hover:bg-accent transition-colors shrink-0"
               onClick={handleClick}
               tabIndex={-1}
+              title="添加附件"
             >
               <Plus className="size-3 text-muted-foreground" />
             </button>
@@ -2098,6 +2444,16 @@ export function AttachmentCell<TData>({
         existingFiles={files}
         onFileRemove={handleFileRemove}
       />
+      {previewImage && (
+        <ImagePreviewDialog
+          open={!!previewImage}
+          onOpenChange={(open) => {
+            if (!open) setPreviewImage(null);
+          }}
+          imageUrl={previewImage.url}
+          imageName={previewImage.name}
+        />
+      )}
     </>
   );
 }

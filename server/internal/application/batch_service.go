@@ -259,14 +259,58 @@ func (s *BatchService) batchUpdateTableRecords(ctx context.Context, tableID stri
 	batches := s.splitRecordUpdatesIntoBatches(mergedUpdates, s.batchSize)
 
 	for i, batch := range batches {
-		// 使用现有的Update方法批量更新
+		// 批量更新记录
 		for _, update := range batch {
-			// 这里需要根据实际的RecordRepository接口来调整
-			// 暂时使用单个更新
-			logger.Debug("batch update record",
-				logger.String("table_id", tableID),
-				logger.String("record_id", update.RecordID),
-				logger.Int("field_count", len(update.FieldUpdates)))
+			// 获取记录
+			recordIDVO := valueobject.NewRecordID(update.RecordID)
+			record, err := s.recordRepo.FindByTableAndID(ctx, tableID, recordIDVO)
+			if err != nil {
+				logger.Error("查找记录失败",
+					logger.String("table_id", tableID),
+					logger.String("record_id", update.RecordID),
+					logger.ErrorField(err))
+				continue
+			}
+			if record == nil {
+				logger.Warn("记录不存在",
+					logger.String("table_id", tableID),
+					logger.String("record_id", update.RecordID))
+				continue
+			}
+
+			// 更新记录数据
+			recordData := record.Data().ToMap()
+			for fieldID, value := range update.FieldUpdates {
+				recordData[fieldID] = value
+			}
+
+			// 创建新的记录数据
+			newData, err := valueobject.NewRecordData(recordData)
+			if err != nil {
+				logger.Error("创建记录数据失败",
+					logger.String("table_id", tableID),
+					logger.String("record_id", update.RecordID),
+					logger.ErrorField(err))
+				continue
+			}
+
+			// 更新记录
+			if err := record.Update(newData, record.UpdatedBy()); err != nil {
+				logger.Error("更新记录失败",
+					logger.String("table_id", tableID),
+					logger.String("record_id", update.RecordID),
+					logger.ErrorField(err))
+				continue
+			}
+
+			// 保存记录
+			if err := s.recordRepo.Save(ctx, record); err != nil {
+				logger.Error("保存记录失败",
+					logger.String("table_id", tableID),
+					logger.String("record_id", update.RecordID),
+					logger.ErrorField(err))
+				return fmt.Errorf("保存记录失败: %w", err)
+			}
 		}
 
 		logger.Debug("batch update table records completed",

@@ -54,6 +54,17 @@ type RecordRepository interface {
 
 	// NextID 生成下一个记录ID
 	NextID() valueobject.RecordID
+
+	// BatchUpdateLinkFieldTitle 批量更新 Link 字段的 title
+	// 使用 PostgreSQL 的 jsonb_set 函数直接更新 JSONB 字段，避免读取整个记录
+	// 性能优化：一次 SQL 更新多条记录，而不是逐条更新
+	BatchUpdateLinkFieldTitle(
+		ctx context.Context,
+		tableID string,
+		linkFieldID string,
+		sourceRecordID string,
+		newTitle string,
+	) error
 }
 
 // RecordFilter 记录过滤器

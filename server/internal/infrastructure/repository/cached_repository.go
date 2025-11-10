@@ -47,6 +47,21 @@ func (r *CachedFieldRepository) buildCacheKey(prefix, id string) string {
 	return fmt.Sprintf("field:%s:%s", prefix, id)
 }
 
+// ClearFieldCache 清除指定字段的缓存（公开方法，供其他包使用）
+func (r *CachedFieldRepository) ClearFieldCache(ctx context.Context, fieldID string) error {
+	cacheKey := r.buildCacheKey("id", fieldID)
+	if err := r.cacheService.Delete(ctx, cacheKey); err != nil {
+		logger.Warn("ClearFieldCache: 清除字段缓存失败",
+			logger.String("field_id", fieldID),
+			logger.ErrorField(err))
+		return err
+	}
+	logger.Info("ClearFieldCache: 字段缓存清除成功",
+		logger.String("field_id", fieldID),
+		logger.String("cache_key", cacheKey))
+	return nil
+}
+
 // FindByID 根据ID查找字段（带缓存）
 func (r *CachedFieldRepository) FindByID(ctx context.Context, id fieldValueobject.FieldID) (*fieldEntity.Field, error) {
 	cacheKey := r.buildCacheKey("id", id.String())
@@ -171,12 +186,84 @@ func (r *CachedFieldRepository) FindByTableID(ctx context.Context, tableID strin
 			}()
 			// 继续查询数据库（不等待缓存清除完成）
 		} else {
-			// ✅ 正常情况：缓存命中且有数据，直接返回（走缓存）
-			logger.Info("✅ CachedFieldRepository.FindByTableID 缓存命中",
-				logger.String("table_id", tableID),
-				logger.Int("cached_count", len(fields)),
-				logger.String("cache_key", cacheKey))
-			return fields, nil
+			// ✅ 关键修复：验证缓存中的字段对象是否有效
+			// 检查字段对象的关键属性是否为空
+			validFields := make([]*fieldEntity.Field, 0, len(fields))
+			invalidCount := 0
+			for i, field := range fields {
+				if field == nil {
+					logger.Warn("⚠️ CachedFieldRepository.FindByTableID 缓存中的字段对象为nil",
+						logger.String("table_id", tableID),
+						logger.Int("field_index", i),
+						logger.String("cache_key", cacheKey))
+					invalidCount++
+					continue
+				}
+				// 检查字段的关键属性
+				fieldID := field.ID().String()
+				fieldName := field.Name().String()
+				if fieldID == "" || fieldName == "" {
+					logger.Warn("⚠️ CachedFieldRepository.FindByTableID 缓存中的字段对象无效",
+						logger.String("table_id", tableID),
+						logger.Int("field_index", i),
+						logger.String("field_id", fieldID),
+						logger.String("field_name", fieldName),
+						logger.String("cache_key", cacheKey))
+					invalidCount++
+					continue
+				}
+				validFields = append(validFields, field)
+			}
+			
+			// 如果所有字段都无效，清除缓存并查询数据库
+			if len(validFields) == 0 && len(fields) > 0 {
+				logger.Warn("⚠️ CachedFieldRepository.FindByTableID 缓存中的所有字段对象都无效，清除缓存并查询数据库",
+					logger.String("table_id", tableID),
+					logger.Int("total_count", len(fields)),
+					logger.Int("invalid_count", invalidCount),
+					logger.String("cache_key", cacheKey))
+				// 异步清除无效缓存
+				go func() {
+					bgCtx := context.Background()
+					if err := r.cacheService.Delete(bgCtx, cacheKey); err != nil {
+						logger.Warn("failed to delete invalid cache (async)",
+							logger.String("cache_key", cacheKey),
+							logger.ErrorField(err))
+					} else {
+						logger.Info("✅ CachedFieldRepository.FindByTableID 无效缓存清除成功（异步）",
+							logger.String("cache_key", cacheKey))
+					}
+				}()
+				// 继续查询数据库（不等待缓存清除完成）
+			} else if len(validFields) < len(fields) {
+				// 部分字段无效，记录警告但使用有效字段
+				logger.Warn("⚠️ CachedFieldRepository.FindByTableID 缓存中部分字段对象无效，使用有效字段",
+					logger.String("table_id", tableID),
+					logger.Int("total_count", len(fields)),
+					logger.Int("valid_count", len(validFields)),
+					logger.Int("invalid_count", invalidCount),
+					logger.String("cache_key", cacheKey))
+				// 使用有效字段，但异步清除缓存以便下次获取完整数据
+				go func() {
+					bgCtx := context.Background()
+					if err := r.cacheService.Delete(bgCtx, cacheKey); err != nil {
+						logger.Warn("failed to delete partially invalid cache (async)",
+							logger.String("cache_key", cacheKey),
+							logger.ErrorField(err))
+					} else {
+						logger.Info("✅ CachedFieldRepository.FindByTableID 部分无效缓存清除成功（异步）",
+							logger.String("cache_key", cacheKey))
+					}
+				}()
+				return validFields, nil
+			} else {
+				// ✅ 正常情况：缓存命中且有有效数据，直接返回（走缓存）
+				logger.Info("✅ CachedFieldRepository.FindByTableID 缓存命中",
+					logger.String("table_id", tableID),
+					logger.Int("cached_count", len(fields)),
+					logger.String("cache_key", cacheKey))
+				return fields, nil
+			}
 		}
 	}
 
@@ -378,6 +465,12 @@ func (r *CachedFieldRepository) NextID() fieldValueobject.FieldID {
 	return r.repo.NextID()
 }
 
+// FindLinkFieldsToTable 查找所有指向指定表的 Link 字段（带缓存）
+func (r *CachedFieldRepository) FindLinkFieldsToTable(ctx context.Context, tableID string) ([]*fieldEntity.Field, error) {
+	// 直接委托给底层仓库，不使用缓存（因为查询结果可能变化频繁）
+	return r.repo.FindLinkFieldsToTable(ctx, tableID)
+}
+
 // CachedRecordRepository 带缓存的记录仓储包装器
 // ✅ 优化：实现查询缓存，减少数据库查询
 type CachedRecordRepository struct {
@@ -415,25 +508,83 @@ func (r *CachedRecordRepository) FindByTableAndID(ctx context.Context, tableID s
 	// 尝试从缓存获取
 	var record *recordEntity.Record
 	if err := r.cacheService.Get(ctx, cacheKey, &record); err == nil {
-		logger.Debug("record cache hit",
-			logger.String("table_id", tableID),
-			logger.String("record_id", id.String()))
-		return record, nil
+		// ✅ 关键修复：验证缓存中的记录对象是否有效
+		if record == nil {
+			logger.Warn("⚠️ CachedRecordRepository.FindByTableAndID: 缓存中的记录对象为nil",
+				logger.String("table_id", tableID),
+				logger.String("record_id", id.String()),
+				logger.String("cache_key", cacheKey))
+			// 继续查询数据库（不等待缓存清除完成）
+		} else {
+			// 检查记录的关键属性
+			recordID := record.ID().String()
+			recordTableID := record.TableID()
+			recordData := record.Data()
+			recordDataMap := recordData.ToMap()
+			if recordID == "" || recordTableID == "" || len(recordDataMap) == 0 {
+				logger.Warn("⚠️ CachedRecordRepository.FindByTableAndID: 缓存中的记录对象无效，清除缓存并查询数据库",
+					logger.String("table_id", tableID),
+					logger.String("record_id", id.String()),
+					logger.String("cached_record_id", recordID),
+					logger.String("cached_table_id", recordTableID),
+					logger.Int("data_field_count", len(recordDataMap)),
+					logger.String("cache_key", cacheKey))
+				// 异步清除无效缓存
+				go func() {
+					bgCtx := context.Background()
+					if err := r.cacheService.Delete(bgCtx, cacheKey); err != nil {
+						logger.Warn("failed to delete invalid record cache (async)",
+							logger.String("cache_key", cacheKey),
+							logger.ErrorField(err))
+					} else {
+						logger.Info("✅ CachedRecordRepository.FindByTableAndID 无效记录缓存清除成功（异步）",
+							logger.String("cache_key", cacheKey))
+					}
+				}()
+				// 继续查询数据库（不等待缓存清除完成）
+			} else {
+				// ✅ 正常情况：缓存命中且有有效数据，直接返回（走缓存）
+				logger.Info("CachedRecordRepository.FindByTableAndID: 缓存命中",
+					logger.String("table_id", tableID),
+					logger.String("record_id", id.String()),
+					logger.String("cache_key", cacheKey),
+					logger.Bool("record_is_nil", record == nil))
+				return record, nil
+			}
+		}
 	}
+
+	logger.Info("CachedRecordRepository.FindByTableAndID: 缓存未命中，查询数据库",
+		logger.String("table_id", tableID),
+		logger.String("record_id", id.String()),
+		logger.String("cache_key", cacheKey))
 
 	// 缓存未命中，查询数据库
 	record, err := r.repo.FindByTableAndID(ctx, tableID, id)
 	if err != nil {
+		logger.Error("CachedRecordRepository.FindByTableAndID: 查询数据库失败",
+			logger.String("table_id", tableID),
+			logger.String("record_id", id.String()),
+			logger.ErrorField(err))
 		return nil, err
 	}
 
-	// 写入缓存
-	if record != nil {
-		if err := r.cacheService.Set(ctx, cacheKey, record, r.ttl); err != nil {
-			logger.Warn("failed to cache record",
-				logger.String("record_id", id.String()),
-				logger.ErrorField(err))
-		}
+	// 写入缓存（包括 nil 值，表示记录不存在）
+	// ⚠️ 注意：如果 record 为 nil，我们也应该缓存它，避免重复查询
+	// 但是，这会导致如果记录后来被创建，缓存中的 nil 会导致问题
+	// 因此，我们需要在记录创建/更新时清除缓存
+	if err := r.cacheService.Set(ctx, cacheKey, record, r.ttl); err != nil {
+		logger.Warn("CachedRecordRepository.FindByTableAndID: 写入缓存失败",
+			logger.String("table_id", tableID),
+			logger.String("record_id", id.String()),
+			logger.String("cache_key", cacheKey),
+			logger.ErrorField(err))
+	} else {
+		logger.Info("CachedRecordRepository.FindByTableAndID: 写入缓存成功",
+			logger.String("table_id", tableID),
+			logger.String("record_id", id.String()),
+			logger.String("cache_key", cacheKey),
+			logger.Bool("record_is_nil", record == nil))
 	}
 
 	return record, nil
@@ -449,9 +600,16 @@ func (r *CachedRecordRepository) Save(ctx context.Context, record *recordEntity.
 	// 清除记录缓存
 	cacheKey := r.buildCacheKey("id", record.TableID(), record.ID().String())
 	if err := r.cacheService.Delete(ctx, cacheKey); err != nil {
-		logger.Warn("failed to invalidate record cache",
+		logger.Warn("CachedRecordRepository.Save: 清除记录缓存失败",
+			logger.String("table_id", record.TableID()),
 			logger.String("record_id", record.ID().String()),
+			logger.String("cache_key", cacheKey),
 			logger.ErrorField(err))
+	} else {
+		logger.Info("✅ CachedRecordRepository.Save: 记录缓存清除成功",
+			logger.String("table_id", record.TableID()),
+			logger.String("record_id", record.ID().String()),
+			logger.String("cache_key", cacheKey))
 	}
 
 	// ✅ 关键修复：清除表格记录列表缓存（虽然List方法已禁用缓存，但为了兼容性仍然清除）
@@ -590,6 +748,25 @@ func (r *CachedRecordRepository) FindByTableID(ctx context.Context, tableID stri
 	return r.repo.FindByTableID(ctx, tableID)
 }
 
+// FindRecordsByLinkValue 查找 Link 字段值包含指定 recordIDs 的所有记录
+// 委托给底层仓库，如果底层仓库支持该方法
+func (r *CachedRecordRepository) FindRecordsByLinkValue(
+	ctx context.Context,
+	tableID string,
+	linkFieldID string,
+	linkedRecordIDs []string,
+) ([]string, error) {
+	// 检查底层仓库是否实现了 FindRecordsByLinkValue 方法
+	if dynamicRepo, ok := r.repo.(interface {
+		FindRecordsByLinkValue(ctx context.Context, tableID string, linkFieldID string, linkedRecordIDs []string) ([]string, error)
+	}); ok {
+		return dynamicRepo.FindRecordsByLinkValue(ctx, tableID, linkFieldID, linkedRecordIDs)
+	}
+
+	// 如果底层仓库不支持，返回错误
+	return nil, fmt.Errorf("method FindRecordsByLinkValue is not implemented for RecordRepository")
+}
+
 func (r *CachedRecordRepository) Delete(ctx context.Context, id recordValueobject.RecordID) error {
 	return r.repo.Delete(ctx, id)
 }
@@ -606,6 +783,77 @@ func (r *CachedRecordRepository) NextID() recordValueobject.RecordID {
 	return r.repo.NextID()
 }
 
+// BatchUpdateLinkFieldTitle 批量更新 Link 字段的 title（带缓存失效）
+func (r *CachedRecordRepository) BatchUpdateLinkFieldTitle(
+	ctx context.Context,
+	tableID string,
+	linkFieldID string,
+	sourceRecordID string,
+	newTitle string,
+) error {
+	logger.Info("CachedRecordRepository: 开始批量更新 Link 字段标题（将清除缓存）",
+		logger.String("table_id", tableID),
+		logger.String("link_field_id", linkFieldID),
+		logger.String("source_record_id", sourceRecordID))
+
+	// 调用底层仓库的批量更新方法
+	err := r.repo.BatchUpdateLinkFieldTitle(ctx, tableID, linkFieldID, sourceRecordID, newTitle)
+	if err != nil {
+		return err
+	}
+
+	// 批量更新后，需要清除相关记录的缓存
+	// 注意：由于批量更新可能影响多条记录，我们无法精确清除缓存
+	// 这里我们尝试查找受影响的记录并清除它们的缓存
+	// 如果底层仓库支持 FindRecordsByLinkValue，使用它来查找受影响的记录
+	if dynamicRepo, ok := r.repo.(interface {
+		FindRecordsByLinkValue(ctx context.Context, tableID string, linkFieldID string, linkedRecordIDs []string) ([]string, error)
+	}); ok {
+		affectedRecordIDs, findErr := dynamicRepo.FindRecordsByLinkValue(ctx, tableID, linkFieldID, []string{sourceRecordID})
+		if findErr == nil && len(affectedRecordIDs) > 0 {
+			// 清除受影响记录的缓存
+			for _, recordID := range affectedRecordIDs {
+				cacheKey := r.buildCacheKey("id", tableID, recordID)
+				if delErr := r.cacheService.Delete(ctx, cacheKey); delErr == nil {
+					logger.Info("已清除记录缓存",
+						logger.String("table_id", tableID),
+						logger.String("record_id", recordID),
+						logger.String("cache_key", cacheKey))
+				} else {
+					logger.Warn("清除记录缓存失败",
+						logger.String("table_id", tableID),
+						logger.String("record_id", recordID),
+						logger.String("cache_key", cacheKey),
+						logger.ErrorField(delErr))
+				}
+			}
+			logger.Info("✅ 已清除受影响记录的缓存",
+				logger.String("table_id", tableID),
+				logger.Int("cleared_count", len(affectedRecordIDs)),
+				logger.Any("affected_record_ids", affectedRecordIDs))
+		} else {
+			if findErr != nil {
+				logger.Warn("查找受影响的记录失败",
+					logger.String("table_id", tableID),
+					logger.String("link_field_id", linkFieldID),
+					logger.ErrorField(findErr))
+			} else {
+				logger.Warn("未找到受影响的记录",
+					logger.String("table_id", tableID),
+					logger.String("link_field_id", linkFieldID),
+					logger.String("source_record_id", sourceRecordID))
+			}
+		}
+	} else {
+		// 如果无法查找受影响的记录，记录警告
+		logger.Warn("无法查找受影响的记录以清除缓存，缓存将在 TTL 后自动失效",
+			logger.String("table_id", tableID),
+			logger.String("link_field_id", linkFieldID))
+	}
+
+	return nil
+}
+
 // GetDB 获取数据库连接（用于事务管理）
 // 如果底层仓库实现了 GetDB 方法，则返回其数据库连接
 func (r *CachedRecordRepository) GetDB() *gorm.DB {
@@ -614,7 +862,9 @@ func (r *CachedRecordRepository) GetDB() *gorm.DB {
 		return dynamicRepo.GetDB()
 	}
 	// 如果底层仓库也是缓存包装器，递归调用
-	if cachedRepo, ok := r.repo.(*CachedRecordRepository); ok {
+	if cachedRepo, ok := r.repo.(interface {
+		GetDB() *gorm.DB
+	}); ok {
 		return cachedRepo.GetDB()
 	}
 	// 如果都不匹配，返回 nil（这不应该发生）

@@ -12,10 +12,14 @@ import (
 	"github.com/easyspace-ai/luckdb/server/internal/domain/fields/factory"
 	"github.com/easyspace-ai/luckdb/server/internal/domain/fields/repository"
 	"github.com/easyspace-ai/luckdb/server/internal/domain/fields/valueobject"
+	tableEntity "github.com/easyspace-ai/luckdb/server/internal/domain/table/entity"
 	tableRepo "github.com/easyspace-ai/luckdb/server/internal/domain/table/repository"
+	tableValueObject "github.com/easyspace-ai/luckdb/server/internal/domain/table/valueobject"
 	"github.com/easyspace-ai/luckdb/server/internal/infrastructure/database"
+	"github.com/easyspace-ai/luckdb/server/internal/infrastructure/database/schema"
 	pkgerrors "github.com/easyspace-ai/luckdb/server/pkg/errors"
 	"github.com/easyspace-ai/luckdb/server/pkg/logger"
+	"gorm.io/gorm"
 )
 
 // FieldService 字段应用服务（集成依赖图管理+实时推送）✨
@@ -27,6 +31,7 @@ type FieldService struct {
 	broadcaster  FieldBroadcaster                      // ✨ WebSocket广播器
 	tableRepo    tableRepo.TableRepository             // ✅ 表格仓储（获取Base ID）
 	dbProvider   database.DBProvider                   // ✅ 数据库提供者（列管理）
+	db           *gorm.DB                              // ✅ 数据库连接（用于 Link 字段 schema 创建）
 }
 
 // FieldBroadcaster 字段变更广播器接口
@@ -43,6 +48,7 @@ func NewFieldService(
 	broadcaster FieldBroadcaster,
 	tableRepo tableRepo.TableRepository,
 	dbProvider database.DBProvider,
+	db *gorm.DB,
 ) *FieldService {
 	return &FieldService{
 		fieldRepo:    fieldRepo,
@@ -51,6 +57,7 @@ func NewFieldService(
 		broadcaster:  broadcaster,
 		tableRepo:    tableRepo,
 		dbProvider:   dbProvider,
+		db:           db,
 	}
 }
 
@@ -142,6 +149,11 @@ func (s *FieldService) CreateField(ctx context.Context, req dto.CreateFieldReque
 		linkFieldID, lookupFieldID := s.extractLookupOptionsFromOptions(req.Options)
 		field, err = s.fieldFactory.CreateLookupField(req.TableID, req.Name, userID, linkFieldID, lookupFieldID)
 
+	case "link":
+		// Link 字段需要从 options 中提取 linkedTableID, relationship 等
+		// 先使用通用方法创建字段，然后在 applyCommonFieldOptions 中处理选项
+		field, err = s.fieldFactory.CreateFieldWithType(req.TableID, req.Name, req.Type, userID)
+
 	default:
 		// ✅ 使用通用方法创建字段，保留原始类型名称（如 singleLineText, longText, email 等）
 		field, err = s.fieldFactory.CreateFieldWithType(req.TableID, req.Name, req.Type, userID)
@@ -173,16 +185,16 @@ func (s *FieldService) CreateField(ctx context.Context, req dto.CreateFieldReque
 		field.SetUnique(true)
 	}
 
-    // 5. ✨ 应用通用字段配置（defaultValue, showAs, formatting 等）
-    // 顶层 defaultValue 兼容：注入到 options 中
-    if req.DefaultValue != nil {
-        if req.Options == nil {
-            req.Options = make(map[string]interface{})
-        }
-        req.Options["defaultValue"] = req.DefaultValue
-    }
-    // 参考 Teable 的优秀设计，补充我们之前缺失的配置
-    s.applyCommonFieldOptions(field, req.Options)
+	// 5. ✨ 应用通用字段配置（defaultValue, showAs, formatting 等）
+	// 顶层 defaultValue 兼容：注入到 options 中
+	if req.DefaultValue != nil {
+		if req.Options == nil {
+			req.Options = make(map[string]interface{})
+		}
+		req.Options["defaultValue"] = req.DefaultValue
+	}
+	// 参考 Teable 的优秀设计，补充我们之前缺失的配置
+	s.applyCommonFieldOptions(ctx, field, req.Options)
 
 	// 6. 循环依赖检测（仅对虚拟字段）
 	if isVirtualFieldType(req.Type) {
@@ -204,9 +216,17 @@ func (s *FieldService) CreateField(ctx context.Context, req dto.CreateFieldReque
 	// 8. ✅ 创建物理表列（完全动态表架构）
 	// 参考旧系统：ALTER TABLE ADD COLUMN
 	// 注意：虚拟字段也需要创建物理列来存储计算结果
-	if s.tableRepo != nil && s.dbProvider != nil {
+	// 注意：对于 Link 字段，需要创建 JSONB 列来存储完整的 link 数据（包括 id 和 title）
+	// 对于 manyOne 和 oneOne 关系，createLinkFieldSchema 会创建外键列（VARCHAR(50)）用于优化查询
+	// 但是 JSONB 列仍然是必需的，用于存储完整的 link 数据
+	var table *tableEntity.Table
+	var baseID, tableID, dbFieldName string
+	shouldSkipPhysicalColumn := false
+	// 不再跳过 manyOne 和 oneOne 关系的物理列创建，因为需要 JSONB 列来存储完整的 link 数据
+	
+	if s.tableRepo != nil && s.dbProvider != nil && !shouldSkipPhysicalColumn {
 		// 8.1 获取Table信息（需要Base ID）
-		table, err := s.tableRepo.GetByID(ctx, req.TableID)
+		table, err = s.tableRepo.GetByID(ctx, req.TableID)
 		if err != nil {
 			return nil, pkgerrors.ErrDatabaseOperation.WithDetails(
 				fmt.Sprintf("获取Table信息失败: %v", err))
@@ -215,13 +235,33 @@ func (s *FieldService) CreateField(ctx context.Context, req dto.CreateFieldReque
 			return nil, pkgerrors.ErrNotFound.WithDetails("Table不存在")
 		}
 
-		baseID := table.BaseID()
-		tableID := table.ID().String()
-		dbFieldName := field.DBFieldName().String() // 例如：field_fld_xxx
+		baseID = table.BaseID()
+		tableID = table.ID().String()
+		dbFieldName = field.DBFieldName().String() // 例如：field_fld_xxx
 
 		// 8.2 使用Field Entity已确定的数据库类型
 		// Field Entity中的determineDBFieldType已经处理了类型映射
 		dbType := field.DBFieldType()
+		
+		// 调试：记录字段类型映射信息
+		fieldTypeStr := field.Type().String()
+		logger.Info("字段类型映射调试",
+			logger.String("field_id", field.ID().String()),
+			logger.String("field_name", field.Name().String()),
+			logger.String("field_type", fieldTypeStr),
+			logger.String("db_field_type", dbType),
+			logger.String("request_type", req.Type))
+		
+		// 对于 Link 字段，确保数据库类型为 JSONB
+		if req.Type == "link" || fieldTypeStr == "link" {
+			if dbType != "JSONB" {
+				logger.Error("Link 字段的数据库类型不正确，强制设置为 JSONB",
+					logger.String("field_id", field.ID().String()),
+					logger.String("expected_type", "JSONB"),
+					logger.String("actual_type", dbType))
+				dbType = "JSONB"
+			}
+		}
 
 		logger.Info("正在为字段创建物理表列",
 			logger.String("field_id", field.ID().String()),
@@ -286,6 +326,46 @@ func (s *FieldService) CreateField(ctx context.Context, req dto.CreateFieldReque
 			logger.String("field_id", field.ID().String()),
 			logger.String("db_field_name", dbFieldName),
 			logger.String("db_type", dbType))
+	}
+
+	// 8.6 ✨ 如果是 Link 字段，创建 Link 字段的数据库 Schema
+	if req.Type == "link" && field.Options() != nil && field.Options().Link != nil {
+		// 如果 table 未初始化，需要重新获取
+		if table == nil {
+			if s.tableRepo == nil {
+				return nil, pkgerrors.ErrDatabaseOperation.WithDetails(
+					"Table 仓储未初始化，无法创建 Link 字段 Schema")
+			}
+			var err error
+			table, err = s.tableRepo.GetByID(ctx, req.TableID)
+			if err != nil {
+				return nil, pkgerrors.ErrDatabaseOperation.WithDetails(
+					fmt.Sprintf("获取Table信息失败: %v", err))
+			}
+			if table == nil {
+				return nil, pkgerrors.ErrNotFound.WithDetails("Table不存在")
+			}
+			baseID = table.BaseID()
+			tableID = table.ID().String()
+			dbFieldName = field.DBFieldName().String()
+		}
+
+		if err := s.createLinkFieldSchema(ctx, table, field); err != nil {
+			logger.Error("创建 Link 字段 Schema 失败",
+				logger.String("field_id", field.ID().String()),
+				logger.ErrorField(err))
+			// 回滚：删除已创建的物理表列（仅当不是 manyOne/oneOne 关系时）
+			// 对于 manyOne/oneOne 关系，我们没有创建物理表列，所以不需要回滚
+			if !shouldSkipPhysicalColumn && s.dbProvider != nil && baseID != "" && tableID != "" && dbFieldName != "" {
+				if rollbackErr := s.dbProvider.DropColumn(ctx, baseID, tableID, dbFieldName); rollbackErr != nil {
+					logger.Error("回滚删除物理表列失败", logger.ErrorField(rollbackErr))
+				}
+			}
+			return nil, pkgerrors.ErrDatabaseOperation.WithDetails(
+				fmt.Sprintf("创建 Link 字段 Schema 失败: %v", err))
+		}
+		logger.Info("✅ Link 字段 Schema 创建成功",
+			logger.String("field_id", field.ID().String()))
 	}
 
 	// 9. 保存字段元数据
@@ -458,20 +538,20 @@ func (s *FieldService) UpdateField(ctx context.Context, fieldID string, req dto.
 		logger.String("field_id", fieldID),
 		logger.String("field_id_parsed", id.String()),
 		logger.String("field_id_is_empty", fmt.Sprintf("%v", id.IsEmpty())))
-	
+
 	// ❌ 关键修复：如果字段ID为空，直接返回错误
 	if id.IsEmpty() {
 		logger.Error("❌ UpdateField 字段ID为空",
 			logger.String("field_id", fieldID))
 		return nil, pkgerrors.ErrBadRequest.WithDetails("字段ID不能为空")
 	}
-	
+
 	// ❌ 关键修复：强制从数据库查询，不使用缓存
 	// 因为缓存可能已经被清除，或者缓存值不准确
 	// 直接使用底层仓库查询，绕过缓存层
 	logger.Info("🔍 UpdateField 直接查询数据库（绕过缓存）",
 		logger.String("field_id", fieldID))
-	
+
 	field, err := s.fieldRepo.FindByID(ctx, id)
 	if err != nil {
 		logger.Error("❌ UpdateField 查找字段失败",
@@ -485,7 +565,7 @@ func (s *FieldService) UpdateField(ctx context.Context, fieldID string, req dto.
 			logger.String("field_id_parsed", id.String()))
 		return nil, pkgerrors.ErrNotFound.WithDetails("字段不存在")
 	}
-	
+
 	logger.Info("✅ UpdateField 找到字段",
 		logger.String("field_id", fieldID),
 		logger.String("field_name", field.Name().String()),
@@ -519,15 +599,15 @@ func (s *FieldService) UpdateField(ctx context.Context, fieldID string, req dto.
 		}
 	}
 
-    // 4. 更新Options（如公式表达式等）
-    if req.Options != nil && len(req.Options) > 0 || req.DefaultValue != nil {
-        // 顶层 defaultValue 兼容：注入到 options 中
-        if req.DefaultValue != nil {
-            if req.Options == nil {
-                req.Options = make(map[string]interface{})
-            }
-            req.Options["defaultValue"] = req.DefaultValue
-        }
+	// 4. 更新Options（如公式表达式等）
+	if req.Options != nil && len(req.Options) > 0 || req.DefaultValue != nil {
+		// 顶层 defaultValue 兼容：注入到 options 中
+		if req.DefaultValue != nil {
+			if req.Options == nil {
+				req.Options = make(map[string]interface{})
+			}
+			req.Options["defaultValue"] = req.DefaultValue
+		}
 		// 根据字段类型更新Options
 		switch field.Type().String() {
 		case "formula":
@@ -597,7 +677,7 @@ func (s *FieldService) UpdateField(ctx context.Context, fieldID string, req dto.
 
 		// ✨ 应用通用字段配置（defaultValue, showAs, formatting 等）
 		// 参考 Teable 的优秀设计，补充我们之前缺失的配置
-		s.applyCommonFieldOptions(field, req.Options)
+		s.applyCommonFieldOptions(ctx, field, req.Options)
 	}
 
 	// 5. 更新约束
@@ -949,7 +1029,7 @@ func (s *FieldService) GetFieldIDsByNames(ctx context.Context, tableID string, f
 
 // applyCommonFieldOptions 应用通用字段配置（defaultValue, showAs, formatting 等）
 // 参考 Teable 的设计，补充我们之前缺失的配置
-func (s *FieldService) applyCommonFieldOptions(field *entity.Field, reqOptions map[string]interface{}) {
+func (s *FieldService) applyCommonFieldOptions(ctx context.Context, field *entity.Field, reqOptions map[string]interface{}) {
 	if reqOptions == nil || field == nil {
 		return
 	}
@@ -1124,6 +1204,84 @@ func (s *FieldService) applyCommonFieldOptions(field *entity.Field, reqOptions m
 		if options.Link == nil {
 			options.Link = &valueobject.LinkOptions{}
 		}
+		
+		// 调试：记录 reqOptions 内容
+		logger.Info("解析 Link 字段选项",
+			logger.Any("reqOptions", reqOptions),
+		)
+		
+		// 解析 link 字段（支持嵌套格式 options.link 或 options.Link）
+		var linkData map[string]interface{}
+		if linkDataRaw, ok := reqOptions["link"].(map[string]interface{}); ok {
+			linkData = linkDataRaw
+			logger.Info("找到 link 字段（小写）", logger.Any("linkData", linkData))
+		} else if linkDataRaw, ok := reqOptions["Link"].(map[string]interface{}); ok {
+			linkData = linkDataRaw
+			logger.Info("找到 Link 字段（大写）", logger.Any("linkData", linkData))
+		} else {
+			logger.Warn("未找到 link 或 Link 字段")
+		}
+		
+		if linkData != nil {
+			// 解析核心字段：关联表ID（支持 linked_table_id 和 foreignTableId）
+			if linkedTableID, ok := linkData["linked_table_id"].(string); ok && linkedTableID != "" {
+				options.Link.LinkedTableID = linkedTableID
+				logger.Info("解析到 linked_table_id", logger.String("linked_table_id", linkedTableID))
+			} else if foreignTableID, ok := linkData["foreignTableId"].(string); ok && foreignTableID != "" {
+				options.Link.LinkedTableID = foreignTableID
+				logger.Info("解析到 foreignTableId", logger.String("foreignTableId", foreignTableID))
+			} else if linkedTableID, ok := linkData["linkedTableId"].(string); ok && linkedTableID != "" {
+				options.Link.LinkedTableID = linkedTableID
+				logger.Info("解析到 linkedTableId", logger.String("linkedTableId", linkedTableID))
+			} else {
+				logger.Warn("未找到关联表ID字段", logger.Any("linkData", linkData))
+			}
+			
+			// 解析关系类型
+			if relationship, ok := linkData["relationship"].(string); ok && relationship != "" {
+				options.Link.Relationship = relationship
+			}
+			
+			// 解析是否对称
+			if isSymmetric, ok := linkData["isSymmetric"].(bool); ok {
+				options.Link.IsSymmetric = isSymmetric
+			} else if isSymmetric, ok := linkData["is_symmetric"].(bool); ok {
+				options.Link.IsSymmetric = isSymmetric
+			}
+			
+			// 解析是否允许多选
+			if allowMultiple, ok := linkData["allowMultiple"].(bool); ok {
+				options.Link.AllowMultiple = allowMultiple
+			} else if allowMultiple, ok := linkData["allow_multiple"].(bool); ok {
+				options.Link.AllowMultiple = allowMultiple
+			}
+			
+			// 解析对称字段ID
+			if symmetricFieldID, ok := linkData["symmetricFieldId"].(string); ok && symmetricFieldID != "" {
+				options.Link.SymmetricFieldID = symmetricFieldID
+			} else if symmetricFieldID, ok := linkData["symmetric_field_id"].(string); ok && symmetricFieldID != "" {
+				options.Link.SymmetricFieldID = symmetricFieldID
+			}
+			
+			// 解析外键字段ID
+			if foreignKeyFieldID, ok := linkData["foreignKeyFieldId"].(string); ok && foreignKeyFieldID != "" {
+				options.Link.ForeignKeyFieldID = foreignKeyFieldID
+			} else if foreignKeyFieldID, ok := linkData["foreign_key_field_id"].(string); ok && foreignKeyFieldID != "" {
+				options.Link.ForeignKeyFieldID = foreignKeyFieldID
+			}
+			
+			// 解析数据库实现细节
+			if fkHostTableName, ok := linkData["fkHostTableName"].(string); ok && fkHostTableName != "" {
+				options.Link.FkHostTableName = fkHostTableName
+			}
+			if selfKeyName, ok := linkData["selfKeyName"].(string); ok && selfKeyName != "" {
+				options.Link.SelfKeyName = selfKeyName
+			}
+			if foreignKeyName, ok := linkData["foreignKeyName"].(string); ok && foreignKeyName != "" {
+				options.Link.ForeignKeyName = foreignKeyName
+			}
+		}
+		
 		// 高级过滤功能（参考 Teable）
 		if baseID, ok := reqOptions["baseId"].(string); ok {
 			options.Link.BaseID = baseID
@@ -1161,10 +1319,37 @@ func (s *FieldService) applyCommonFieldOptions(field *entity.Field, reqOptions m
 			}
 			options.Link.Filter = filter
 		}
+		
+		// 调试：记录最终解析结果
+		if options.Link != nil {
+			logger.Info("Link 字段选项解析完成",
+				logger.String("LinkedTableID", options.Link.LinkedTableID),
+				logger.String("Relationship", options.Link.Relationship),
+				logger.String("LookupFieldID", options.Link.LookupFieldID),
+			)
+		}
 	}
 
 	// 更新字段的 options
 	field.UpdateOptions(options)
+	
+	// 对于 Link 字段，如果 lookupFieldID 为空，需要从关联表获取并保存
+	if field.Type().String() == "link" && options.Link != nil && options.Link.LookupFieldID == "" && options.Link.LinkedTableID != "" {
+		// 从关联表获取主字段ID
+		primaryFieldID, err := s.getPrimaryFieldID(ctx, options.Link.LinkedTableID)
+		if err != nil {
+			logger.Warn("无法从关联表获取主字段ID（将在 createLinkFieldSchema 中重试）",
+				logger.String("linked_table_id", options.Link.LinkedTableID),
+				logger.ErrorField(err))
+		} else {
+			options.Link.LookupFieldID = primaryFieldID
+			logger.Info("从关联表自动获取主字段ID并保存到字段 options",
+				logger.String("linked_table_id", options.Link.LinkedTableID),
+				logger.String("lookup_field_id", primaryFieldID))
+			// 更新字段的 options
+			field.UpdateOptions(options)
+		}
+	}
 }
 
 // 辅助函数：从 map 中安全获取字符串
@@ -1181,4 +1366,324 @@ func getBoolFromMap(m map[string]interface{}, key string) bool {
 		return v
 	}
 	return false
+}
+
+// createLinkFieldSchema 创建 Link 字段的数据库 Schema
+func (s *FieldService) createLinkFieldSchema(
+	ctx context.Context,
+	table *tableEntity.Table,
+	field *entity.Field,
+) error {
+	if s.dbProvider == nil || s.db == nil {
+		return fmt.Errorf("数据库提供者或连接未初始化")
+	}
+
+	options := field.Options()
+	if options == nil || options.Link == nil {
+		return fmt.Errorf("Link 字段选项不存在")
+	}
+
+	linkOptions := options.Link
+
+	// 转换 LinkOptions 到 LinkFieldOptions
+	currentTableID := table.ID().String()
+	linkFieldOptions, err := s.convertToLinkFieldOptions(ctx, currentTableID, linkOptions, field)
+	if err != nil {
+		return fmt.Errorf("转换 Link 字段选项失败: %w", err)
+	}
+
+	// 将确定的 lookupFieldID 保存回字段的 options（如果之前为空）
+	if linkOptions.LookupFieldID == "" && linkFieldOptions.LookupFieldID != "" {
+		linkOptions.LookupFieldID = linkFieldOptions.LookupFieldID
+		logger.Info("将确定的 lookupFieldID 保存回字段 options",
+			logger.String("field_id", field.ID().String()),
+			logger.String("lookup_field_id", linkOptions.LookupFieldID))
+		// 更新字段的 options
+		field.UpdateOptions(options)
+	}
+
+	// 获取关联表信息
+	foreignTableID := linkFieldOptions.GetForeignTableID()
+	if foreignTableID == "" {
+		return fmt.Errorf("关联表ID不存在")
+	}
+
+	foreignTable, err := s.tableRepo.GetByID(ctx, foreignTableID)
+	if err != nil {
+		return fmt.Errorf("获取关联表失败: %w", err)
+	}
+	if foreignTable == nil {
+		return fmt.Errorf("关联表不存在: %s", foreignTableID)
+	}
+
+	// 创建 Link 字段 Schema 创建器
+	schemaCreator := schema.NewLinkFieldSchemaCreator(s.dbProvider, s.db)
+
+	// 创建 Link 字段 Schema
+	baseID := table.BaseID()
+	tableID := table.ID().String()
+	hasOrderColumn := false // TODO: 从字段元数据获取
+
+	if err := schemaCreator.CreateLinkFieldSchema(
+		ctx,
+		baseID,
+		tableID,
+		foreignTableID,
+		linkFieldOptions,
+		hasOrderColumn,
+	); err != nil {
+		return fmt.Errorf("创建 Link 字段 Schema 失败: %w", err)
+	}
+
+	return nil
+}
+
+// convertToLinkFieldOptions 将 LinkOptions 转换为 LinkFieldOptions
+// 参考 teable 的实现：如果 lookupFieldID 为空，自动从关联表获取主字段（第一个非虚拟字段）
+func (s *FieldService) convertToLinkFieldOptions(ctx context.Context, currentTableID string, linkOptions *valueobject.LinkOptions, field *entity.Field) (*tableValueObject.LinkFieldOptions, error) {
+	// 调试：记录 linkOptions 内容
+	logger.Info("convertToLinkFieldOptions 开始转换",
+		logger.String("LinkedTableID", linkOptions.LinkedTableID),
+		logger.String("Relationship", linkOptions.Relationship),
+		logger.String("LookupFieldID", linkOptions.LookupFieldID),
+		logger.Bool("IsSymmetric", linkOptions.IsSymmetric),
+		logger.Bool("AllowMultiple", linkOptions.AllowMultiple),
+	)
+	
+	// 获取必需字段
+	foreignTableID := linkOptions.LinkedTableID
+	if foreignTableID == "" {
+		logger.Error("关联表ID为空",
+			logger.String("LinkedTableID", linkOptions.LinkedTableID),
+			logger.String("Relationship", linkOptions.Relationship),
+		)
+		return nil, fmt.Errorf("关联表ID不存在")
+	}
+
+	relationship := linkOptions.Relationship
+	if relationship == "" {
+		relationship = "manyMany" // 默认值
+	}
+
+	// 获取 lookupFieldID，如果为空则从关联表获取主字段ID（参考 teable 实现）
+	lookupFieldID := linkOptions.LookupFieldID
+	if lookupFieldID == "" {
+		// 从关联表获取主字段ID（第一个非虚拟字段）
+		primaryFieldID, err := s.getPrimaryFieldID(ctx, foreignTableID)
+		if err != nil {
+			logger.Error("无法从关联表获取主字段ID",
+				logger.String("foreignTableID", foreignTableID),
+				logger.ErrorField(err),
+			)
+			return nil, fmt.Errorf("无法从关联表获取主字段ID: %w", err)
+		}
+		lookupFieldID = primaryFieldID
+		logger.Info("从关联表自动获取主字段ID",
+			logger.String("foreignTableID", foreignTableID),
+			logger.String("lookupFieldID", lookupFieldID),
+		)
+	}
+
+	// 生成必需的字段名（如果不存在）
+	fkHostTableName := linkOptions.FkHostTableName
+	selfKeyName := linkOptions.SelfKeyName
+	foreignKeyName := linkOptions.ForeignKeyName
+	
+	// 调试：记录 foreignKeyName 的初始值
+	logger.Info("convertToLinkFieldOptions 检查 foreignKeyName",
+		logger.String("foreignKeyName", foreignKeyName),
+		logger.String("relationship", relationship),
+		logger.Bool("fieldIsNil", field == nil),
+	)
+
+	// 如果不存在，生成默认值
+	if fkHostTableName == "" {
+		// 根据关系类型生成 FkHostTableName
+		switch relationship {
+		case "manyMany":
+			// ManyMany: junction table 名称
+			fkHostTableName = fmt.Sprintf("link_%s_%s", currentTableID, foreignTableID)
+		case "manyOne":
+			// ManyOne: 当前表名（外键存储在当前表）
+			fkHostTableName = currentTableID
+		case "oneMany":
+			// OneMany: 关联表名（外键存储在关联表）
+			fkHostTableName = foreignTableID
+		case "oneOne":
+			// OneOne: 当前表名（外键存储在当前表）
+			fkHostTableName = currentTableID
+		default:
+			// 默认使用当前表名
+			fkHostTableName = currentTableID
+		}
+		logger.Info("自动生成 FkHostTableName",
+			logger.String("relationship", relationship),
+			logger.String("currentTableID", currentTableID),
+			logger.String("foreignTableID", foreignTableID),
+			logger.String("fkHostTableName", fkHostTableName),
+		)
+	}
+
+	if selfKeyName == "" {
+		selfKeyName = "__id" // 默认使用主键
+	}
+
+	if foreignKeyName == "" {
+		// 对于 manyOne 和 oneOne 关系，外键列名应该使用字段的 DBFieldName，而不是 __id
+		// 因为 __id 是系统字段，每个表都有，会导致冲突
+		if relationship == "manyOne" || relationship == "oneOne" {
+			if field != nil {
+				foreignKeyName = field.DBFieldName().String()
+				logger.Info("使用字段的 DBFieldName 作为外键列名",
+					logger.String("relationship", relationship),
+					logger.String("fieldID", field.ID().String()),
+					logger.String("dbFieldName", foreignKeyName),
+				)
+			} else {
+				// 如果没有字段对象，使用默认值（但这不是理想情况）
+				foreignKeyName = "__id"
+				logger.Warn("字段对象为空，使用默认外键列名 __id",
+					logger.String("relationship", relationship),
+				)
+			}
+		} else {
+			// 对于 manyMany 和 oneMany 关系，使用 __id 作为外键列名（存储在 junction table 或关联表中）
+			foreignKeyName = "__id" // 默认使用主键
+		}
+	}
+
+	// 创建 LinkFieldOptions
+	linkFieldOptions, err := tableValueObject.NewLinkFieldOptions(
+		foreignTableID,
+		relationship,
+		lookupFieldID,
+		fkHostTableName,
+		selfKeyName,
+		foreignKeyName,
+	)
+	if err != nil {
+		return nil, err
+	}
+
+	// 设置可选字段
+	if linkOptions.SymmetricFieldID != "" {
+		linkFieldOptions.WithSymmetricField(linkOptions.SymmetricFieldID)
+	}
+
+	if linkOptions.IsSymmetric {
+		linkFieldOptions.IsOneWay = false
+	} else {
+		linkFieldOptions.AsOneWay()
+	}
+
+	if linkOptions.BaseID != "" {
+		linkFieldOptions.BaseID = linkOptions.BaseID
+	}
+
+	if linkOptions.FilterByViewID != nil {
+		linkFieldOptions.FilterByViewID = linkOptions.FilterByViewID
+	}
+
+	if len(linkOptions.VisibleFieldIDs) > 0 {
+		linkFieldOptions.VisibleFieldIDs = linkOptions.VisibleFieldIDs
+	}
+
+	if linkOptions.Filter != nil {
+		linkFieldOptions.Filter = &tableValueObject.FilterOptions{
+			Conjunction: linkOptions.Filter.Conjunction,
+			Conditions:  make([]tableValueObject.FilterCondition, 0, len(linkOptions.Filter.Conditions)),
+		}
+		for _, cond := range linkOptions.Filter.Conditions {
+			linkFieldOptions.Filter.Conditions = append(linkFieldOptions.Filter.Conditions, tableValueObject.FilterCondition{
+				FieldID:  cond.FieldID,
+				Operator: cond.Operator,
+				Value:    cond.Value,
+			})
+		}
+	}
+
+	return linkFieldOptions, nil
+}
+
+// getPrimaryFieldID 获取表的主字段ID（第一个非虚拟字段）
+// 参考 teable 的实现：当 lookupFieldID 为空时，自动使用关联表的第一个非虚拟字段
+func (s *FieldService) getPrimaryFieldID(ctx context.Context, tableID string) (string, error) {
+	logger.Info("getPrimaryFieldID 开始获取主字段ID",
+		logger.String("tableID", tableID),
+	)
+
+	fields, err := s.fieldRepo.FindByTableID(ctx, tableID)
+	if err != nil {
+		logger.Error("getPrimaryFieldID 获取表字段失败",
+			logger.String("tableID", tableID),
+			logger.ErrorField(err),
+		)
+		return "", fmt.Errorf("获取表字段失败: %w", err)
+	}
+
+	logger.Info("getPrimaryFieldID 获取到字段列表",
+		logger.String("tableID", tableID),
+		logger.Int("fieldCount", len(fields)),
+		logger.Any("fieldTypes", func() []string {
+			types := make([]string, len(fields))
+			for i, f := range fields {
+				types[i] = f.Type().String()
+			}
+			return types
+		}()),
+	)
+
+	if len(fields) == 0 {
+		logger.Error("getPrimaryFieldID 表中没有字段",
+			logger.String("tableID", tableID),
+		)
+		return "", fmt.Errorf("表 %s 中没有找到字段", tableID)
+	}
+
+	// 返回第一个非虚拟字段
+	for _, field := range fields {
+		fieldType := field.Type().String()
+		fieldID := field.ID().String()
+		// 检查 fieldID 是否为空
+		if fieldID == "" {
+			logger.Warn("getPrimaryFieldID 跳过字段ID为空的字段",
+				logger.String("tableID", tableID),
+				logger.String("fieldType", fieldType),
+				logger.String("fieldName", field.Name().String()),
+			)
+			continue
+		}
+		// 虚拟字段类型：formula, rollup, lookup, ai
+		if fieldType != "formula" && fieldType != "rollup" && fieldType != "lookup" && fieldType != "ai" {
+			logger.Info("getPrimaryFieldID 找到主字段",
+				logger.String("tableID", tableID),
+				logger.String("fieldID", fieldID),
+				logger.String("fieldType", fieldType),
+				logger.String("fieldName", field.Name().String()),
+			)
+			return fieldID, nil
+		}
+	}
+
+	// 如果没有普通字段，返回第一个字段（但必须确保 fieldID 不为空）
+	for _, field := range fields {
+		fieldID := field.ID().String()
+		if fieldID != "" {
+			fieldType := field.Type().String()
+			logger.Info("getPrimaryFieldID 使用第一个有效字段（可能是虚拟字段）",
+				logger.String("tableID", tableID),
+				logger.String("fieldID", fieldID),
+				logger.String("fieldType", fieldType),
+				logger.String("fieldName", field.Name().String()),
+			)
+			return fieldID, nil
+		}
+	}
+
+	// 如果所有字段的 ID 都为空，返回错误
+	logger.Error("getPrimaryFieldID 所有字段的ID都为空",
+		logger.String("tableID", tableID),
+		logger.Int("fieldCount", len(fields)),
+	)
+	return "", fmt.Errorf("表 %s 中所有字段的ID都为空", tableID)
 }

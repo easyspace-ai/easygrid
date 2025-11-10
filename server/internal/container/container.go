@@ -29,8 +29,10 @@ import (
 	viewRepo "github.com/easyspace-ai/luckdb/server/internal/domain/view/repository"
 
 	// 计算服务相关包
+	linkService "github.com/easyspace-ai/luckdb/server/internal/domain/calculation/link"
 	"github.com/easyspace-ai/luckdb/server/internal/domain/calculation/lookup"
 	"github.com/easyspace-ai/luckdb/server/internal/domain/calculation/rollup"
+	tableService "github.com/easyspace-ai/luckdb/server/internal/domain/table/service"
 
 	// JSVM 和实时通信服务
 	"github.com/easyspace-ai/luckdb/server/internal/jsvm"
@@ -96,6 +98,10 @@ type Container struct {
 
 	// 兼容性：保留原有的计算服务
 	calculationService *application.CalculationService // 计算引擎服务 ✨
+
+	// Link 字段服务 ✨
+	linkService            *tableService.LinkService
+	linkTitleUpdateService *application.LinkTitleUpdateService // ✨ Link 字段标题更新服务
 
 	// 业务事件管理器 ✨
 	businessEventManager *events.BusinessEventManager
@@ -346,6 +352,7 @@ func (c *Container) initServices() {
 		fieldBroadcaster,  // ✅ 使用业务事件管理器广播字段变更
 		c.tableRepository, // ✅ 注入TableRepository
 		c.dbProvider,      // ✅ 注入DBProvider
+		c.db.GetDB(),      // ✅ 注入数据库连接（用于 Link 字段 schema 创建）
 	)
 
 	// 14. TableService（依赖 FieldService 和 ViewService）
@@ -370,6 +377,34 @@ func (c *Container) initServices() {
 		c.businessEventManager, // ✨ 业务事件管理器
 	)
 
+	// ✨ Link 字段服务（在RecordService之前初始化）
+	// 使用适配器将实际仓储接口适配为 LinkService 所需的接口
+	linkFieldRepo := tableService.NewLinkFieldRepositoryAdapter(c.fieldRepository)
+	linkRecordRepo := tableService.NewLinkRecordRepositoryAdapter(c.recordRepository)
+	c.linkService = tableService.NewLinkService(
+		c.db.GetDB(),
+		linkFieldRepo,
+		linkRecordRepo,
+	)
+
+	// ✨ Link 字段标题更新服务（在RecordService之前初始化）
+	// 使用适配器将实际仓储接口适配为 link.LinkService 所需的接口
+	linkCalcFieldRepo := linkService.NewLinkFieldRepositoryAdapter(c.fieldRepository)
+	linkCalcRecordRepo := linkService.NewLinkRecordRepositoryAdapter(c.recordRepository)
+	linkCalcService := linkService.NewLinkService(
+		linkCalcFieldRepo,
+		linkCalcRecordRepo,
+		logger.Logger,
+	)
+	linkTitleUpdateService := application.NewLinkTitleUpdateService(
+		linkCalcService,
+		c.fieldRepository,
+		c.recordRepository,
+		c.batchService,
+		nil, // ✨ ShareDB 服务将在 initJSVMServices 中设置
+	)
+	c.linkTitleUpdateService = linkTitleUpdateService // ✨ 保存到容器中
+
 	// ✅ Phase 2: 类型转换服务
 	typecastService := application.NewTypecastService(c.fieldRepository)
 
@@ -384,6 +419,8 @@ func (c *Container) initServices() {
 		c.businessEventManager, // ✨ 业务事件管理器
 		typecastService,        // ✅ 注入验证服务
 		nil,                    // ✨ ShareDB 服务将在 initJSVMServices 中设置
+		c.linkService,          // ✨ 注入 Link 字段服务
+		linkTitleUpdateService, // ✨ 注入 Link 字段标题更新服务
 	)
 
 	// ✅ 初始化附件服务
@@ -947,6 +984,12 @@ func (c *Container) initShareDB(logger *zap.Logger) {
 			c.recordService.SetBroadcaster(broadcaster)
 			logger.Info("✅ RecordBroadcaster 已设置")
 		}
+	}
+
+	// ✨ 设置 ShareDB 服务到 LinkTitleUpdateService
+	if c.linkTitleUpdateService != nil {
+		c.linkTitleUpdateService.SetShareDBService(c.realtimeManager.GetShareDBService())
+		logger.Info("✅ LinkTitleUpdateService ShareDB 服务已设置")
 	}
 
 	logger.Info("✅ ShareDB 服务初始化完成")

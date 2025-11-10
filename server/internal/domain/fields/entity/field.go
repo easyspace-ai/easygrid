@@ -8,6 +8,7 @@ import (
 
 	"github.com/easyspace-ai/luckdb/server/internal/domain/fields"
 	"github.com/easyspace-ai/luckdb/server/internal/domain/fields/valueobject"
+	"github.com/easyspace-ai/luckdb/server/pkg/logger"
 )
 
 // Field 字段实体（充血模型）
@@ -520,6 +521,8 @@ func (f *Field) ConvertCellValueToDBValue(value interface{}) interface{} {
 		return f.convertRollupValueToDB(value)
 	case valueobject.TypeLookup:
 		return f.convertLookupValueToDB(value)
+	case valueobject.TypeLink:
+		return f.convertLinkValueToDB(value)
 	case valueobject.TypeCount:
 		return f.convertCountValueToDB(value)
 	case valueobject.TypeAI:
@@ -594,6 +597,26 @@ func (f *Field) convertLookupValueToDB(value interface{}) interface{} {
 	return jsonBytes
 }
 
+// convertLinkValueToDB 转换关联字段值
+func (f *Field) convertLinkValueToDB(value interface{}) interface{} {
+	// 关联字段使用JSONB类型存储
+	// 前端发送的格式可能是：
+	// - 单个对象: { id: "rec_xxx", title: "..." }
+	// - 数组: [{ id: "rec_xxx", title: "..." }, ...]
+	// - null: null
+	if value == nil {
+		return nil
+	}
+	
+	// 序列化为JSON字节数组
+	jsonBytes, err := json.Marshal(value)
+	if err != nil {
+		// 如果JSON序列化失败，返回null
+		return nil
+	}
+	return jsonBytes
+}
+
 // convertCountValueToDB 转换计数字段值
 func (f *Field) convertCountValueToDB(value interface{}) interface{} {
 	// 计数字段使用INTEGER类型存储
@@ -656,6 +679,8 @@ func (f *Field) ConvertDBValueToCellValue(value interface{}) interface{} {
 		return f.convertRollupValueFromDB(value)
 	case valueobject.TypeLookup:
 		return f.convertLookupValueFromDB(value)
+	case valueobject.TypeLink:
+		return f.convertLinkValueFromDB(value)
 	case valueobject.TypeCount:
 		return f.convertCountValueFromDB(value)
 	case valueobject.TypeAI:
@@ -690,6 +715,32 @@ func (f *Field) convertFormulaValueFromDB(value interface{}) interface{} {
 // convertRollupValueFromDB 从数据库转换汇总字段值
 func (f *Field) convertRollupValueFromDB(value interface{}) interface{} {
 	// 汇总字段存储为NUMERIC，保持数值类型
+	return value
+}
+
+// convertLinkValueFromDB 从数据库转换关联字段值
+func (f *Field) convertLinkValueFromDB(value interface{}) interface{} {
+	// 关联字段存储为JSONB，需要解析
+	if value == nil {
+		return nil
+	}
+	
+	var result interface{}
+	
+	switch v := value.(type) {
+	case []byte:
+		if err := json.Unmarshal(v, &result); err == nil {
+			return result
+		}
+	case string:
+		if err := json.Unmarshal([]byte(v), &result); err == nil {
+			return result
+		}
+	default:
+		// 如果已经是反序列化的对象，直接返回
+		return value
+	}
+	
 	return value
 }
 
@@ -734,51 +785,63 @@ func (f *Field) convertAIValueFromDB(value interface{}) interface{} {
 
 // determineDBFieldType 确定数据库字段类型
 func determineDBFieldType(fieldType valueobject.FieldType) string {
+	fieldTypeStr := fieldType.String()
+	var dbType string
+	
 	// 根据字段类型映射到数据库类型（PostgreSQL）
-	switch fieldType.String() {
+	switch fieldTypeStr {
 	case valueobject.TypeText, valueobject.TypeEmail, valueobject.TypeURL, valueobject.TypePhone:
-		return "TEXT"
+		dbType = "TEXT"
 
 	case valueobject.TypeNumber, valueobject.TypeRating, valueobject.TypePercent,
 		valueobject.TypeCurrency, valueobject.TypeDuration:
-		return "NUMERIC"
+		dbType = "NUMERIC"
 
 	case valueobject.TypeDate:
-		return "DATE"
+		dbType = "DATE"
 
 	case valueobject.TypeDateTime, valueobject.TypeCreatedTime, valueobject.TypeModifiedTime:
-		return "TIMESTAMP"
+		dbType = "TIMESTAMP"
 
 	case valueobject.TypeBoolean, valueobject.TypeCheckbox:
-		return "BOOLEAN"
+		dbType = "BOOLEAN"
 
 	case valueobject.TypeSelect:
-		return "TEXT"
+		dbType = "TEXT"
 
 	case valueobject.TypeMultipleSelect, valueobject.TypeAttachment, valueobject.TypeUser:
-		return "JSONB"
+		dbType = "JSONB"
 
 	case valueobject.TypeLink:
-		return "TEXT[]" // 数组类型
+		dbType = "JSONB" // 关联字段使用JSONB存储（支持单个对象或数组）
 
 	case valueobject.TypeAutoNumber:
-		return "SERIAL"
+		dbType = "SERIAL"
 
 	// 虚拟字段存储在数据库中（存储计算结果）
 	case valueobject.TypeFormula:
-		return "TEXT" // 公式结果可能是任意类型，用TEXT存储
+		dbType = "TEXT" // 公式结果可能是任意类型，用TEXT存储
 	case valueobject.TypeRollup:
-		return "NUMERIC" // 聚合结果
+		dbType = "NUMERIC" // 聚合结果
 	case valueobject.TypeLookup:
-		return "JSONB" // 查找结果（可能是多个值）
+		dbType = "JSONB" // 查找结果（可能是多个值）
 	case valueobject.TypeCount:
-		return "INTEGER" // 计数结果
+		dbType = "INTEGER" // 计数结果
 	case valueobject.TypeAI:
-		return "TEXT" // AI生成的结果
+		dbType = "TEXT" // AI生成的结果
 
 	default:
-		return "TEXT"
+		dbType = "TEXT"
 	}
+	
+	// 调试日志：记录字段类型映射（仅对 Link 字段）
+	if fieldTypeStr == valueobject.TypeLink {
+		logger.Info("determineDBFieldType: Link 字段类型映射",
+			logger.String("field_type", fieldTypeStr),
+			logger.String("db_type", dbType))
+	}
+	
+	return dbType
 }
 
 // SetOrder 设置字段排序值（用于创建字段时设置正确的order，参考原系统）

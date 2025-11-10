@@ -52,19 +52,29 @@ func (tc *TxContext) AddCallback(callback func()) {
 // ExecuteCallbacks 执行所有回调
 func (tc *TxContext) ExecuteCallbacks() {
 	tc.mu.Lock()
-	defer tc.mu.Unlock()
+	callbacks := make([]func(), len(tc.Callbacks))
+	copy(callbacks, tc.Callbacks)
+	tc.mu.Unlock()
 
-	for _, callback := range tc.Callbacks {
+	for i, callback := range callbacks {
 		// 捕获 panic，防止单个回调失败影响其他回调
 		func() {
 			defer func() {
 				if r := recover(); r != nil {
 					logger.Error("事务回调执行失败",
 						logger.String("tx_id", tc.ID),
+						logger.Int("callback_index", i),
 						logger.Any("panic", r))
 				}
 			}()
+			logger.Debug("执行事务回调",
+				logger.String("tx_id", tc.ID),
+				logger.Int("callback_index", i),
+				logger.Int("total_callbacks", len(callbacks)))
 			callback()
+			logger.Debug("✅ 事务回调执行成功",
+				logger.String("tx_id", tc.ID),
+				logger.Int("callback_index", i))
 		}()
 	}
 }

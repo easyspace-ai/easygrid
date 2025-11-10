@@ -207,25 +207,26 @@ export function DataGrid<TData>({
   const actualHeight = height === 'auto' ? calculatedHeight : height;
   
   // 详细调试：检查实际数据状态
-  React.useEffect(() => {
-    const virtualIndexes = rowVirtualizer.getVirtualIndexes();
-    const virtualItems = rowVirtualizer.getVirtualItems();
-    console.log("[DataGrid] 渲染状态调试:", {
-      rowVirtualizerCount: rowVirtualizer.options.count,
-      virtualIndexes: virtualIndexes,
-      virtualIndexesLength: virtualIndexes.length,
-      virtualItems: virtualItems.map(item => ({ index: item.index, start: item.start, size: item.size })),
-      virtualItemsLength: virtualItems.length,
-      tableRowsCount: rows.length,
-      tableRowIds: rows.map(r => r.id),
-      tableState: {
-        sorting: table.getState().sorting,
-        columnOrder: table.getState().columnOrder,
-        columnFilters: table.getState().columnFilters,
-        globalFilter: table.getState().globalFilter,
-      },
-    });
-  }, [rows, rowVirtualizer, table]);
+  // 减少日志输出：只在开发环境或调试模式下记录
+  // React.useEffect(() => {
+  //   const virtualIndexes = rowVirtualizer.getVirtualIndexes();
+  //   const virtualItems = rowVirtualizer.getVirtualItems();
+  //   console.log("[DataGrid] 渲染状态调试:", {
+  //     rowVirtualizerCount: rowVirtualizer.options.count,
+  //     virtualIndexes: virtualIndexes,
+  //     virtualIndexesLength: virtualIndexes.length,
+  //     virtualItems: virtualItems.map(item => ({ index: item.index, start: item.start, size: item.size })),
+  //     virtualItemsLength: virtualItems.length,
+  //     tableRowsCount: rows.length,
+  //     tableRowIds: rows.map(r => r.id),
+  //     tableState: {
+  //       sorting: table.getState().sorting,
+  //       columnOrder: table.getState().columnOrder,
+  //       columnFilters: table.getState().columnFilters,
+  //       globalFilter: table.getState().globalFilter,
+  //     },
+  //   });
+  // }, [rows, rowVirtualizer, table]);
 
   const meta = table.options.meta;
   const rowHeight = meta?.rowHeight ?? "short";

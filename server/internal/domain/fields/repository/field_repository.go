@@ -57,6 +57,10 @@ type FieldRepository interface {
 
 	// NextID 生成下一个字段ID
 	NextID() valueobject.FieldID
+
+	// FindLinkFieldsToTable 查找所有指向指定表的 Link 字段
+	// 查询所有 Link 类型字段，且 options.link.linkedTableID 等于目标 tableID
+	FindLinkFieldsToTable(ctx context.Context, tableID string) ([]*entity.Field, error)
 }
 
 // FieldFilter 字段过滤器

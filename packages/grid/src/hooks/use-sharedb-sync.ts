@@ -110,12 +110,13 @@ export function useShareDBSync(
   // 处理文档更新事件（使用 ref 中的回调，避免依赖变化）
   const handleDocumentUpdate = useCallback(
     (recordId: string, event: ShareDBDocEvent) => {
-      console.log(`[useShareDBSync] handleDocumentUpdate for record ${recordId}`, {
-        hasOp: !!event.op && event.op.length > 0,
-        opLength: event.op?.length || 0,
-        source: event.source,
-        hasData: !!event.data
-      })
+      // 只在有实际操作时记录日志，减少日志输出
+      // console.log(`[useShareDBSync] handleDocumentUpdate for record ${recordId}`, {
+      //   hasOp: !!event.op && event.op.length > 0,
+      //   opLength: event.op?.length || 0,
+      //   source: event.source,
+      //   hasData: !!event.data
+      // })
 
       // 使用 source 参数判断是否本地操作（参考 teable）
       // source === true: 本地操作（本客户端触发的）
@@ -123,24 +124,27 @@ export function useShareDBSync(
       
       // 如果是本地操作，且我们已经乐观更新了，可以跳过或更新一次（避免重复）
       if (event.source === true) {
-        console.log(`[useShareDBSync] 本地操作，recordId: ${recordId}`)
+        // 减少日志输出
+        // console.log(`[useShareDBSync] 本地操作，recordId: ${recordId}`)
         // 本地操作可能是 ShareDB 确认的，但我们已经在 handleDataChange 中乐观更新了
         // 可以选择跳过，或者更新一次确保数据一致
         // 这里我们选择更新一次，确保 ShareDB 文档数据和本地状态一致
         const doc = (serviceRef.current as any)?.subscribedDocs?.get?.(recordId)
         if (doc?.data) {
-          console.log(`[useShareDBSync] 本地操作确认，更新本地状态`, doc.data)
+          // 减少日志输出
+          // console.log(`[useShareDBSync] 本地操作确认，更新本地状态`, doc.data)
           onRecordUpdateRef.current(recordId, { data: doc.data })
         }
         return
       }
 
       // 处理远程更新（source === false 或 undefined）
-      console.log(`[useShareDBSync] 远程操作，recordId: ${recordId}`, { 
-        hasEventData: !!event.data, 
-        eventData: event.data,
-        hasOps: !!event.op && event.op.length > 0 
-      })
+      // 只在有实际操作时记录日志，减少日志输出
+      // console.log(`[useShareDBSync] 远程操作，recordId: ${recordId}`, { 
+      //   hasEventData: !!event.data, 
+      //   eventData: event.data,
+      //   hasOps: !!event.op && event.op.length > 0 
+      // })
       
       // 从 ShareDB 文档获取最新数据（op 事件的数据已经在文档中应用）
       // 使用 requestAnimationFrame 和 setTimeout 确保 ShareDB 的操作已经完全应用到文档
@@ -151,11 +155,12 @@ export function useShareDBSync(
           // 优先使用 doc.data（最新状态），如果不可用则使用 event.data
           const shareDBData = doc?.data || event.data
           if (shareDBData) {
-            console.log(`[useShareDBSync] 应用远程更新`, { 
-              fromDoc: !!doc?.data, 
-              fromEvent: !!event.data,
-              data: shareDBData 
-            })
+            // 只在有实际数据变化时记录日志
+            // console.log(`[useShareDBSync] 应用远程更新`, { 
+            //   fromDoc: !!doc?.data, 
+            //   fromEvent: !!event.data,
+            //   data: shareDBData 
+            // })
             // ShareDB 文档格式：doc.data 是 { [fieldId]: value, ... }
             // 但 handleRecordUpdate 期望 { data: { [fieldId]: value, ... } }
             const finalData = shareDBData && typeof shareDBData === 'object' && 'data' in shareDBData
@@ -191,7 +196,8 @@ export function useShareDBSync(
         handleDocumentUpdate(recordId, event)
       })
 
-      console.log('[useShareDBSync] 订阅完成，记录数:', recordIds.length)
+      // 减少日志输出：只在首次订阅或记录数变化时记录
+      // console.log('[useShareDBSync] 订阅完成，记录数:', recordIds.length)
       setSubscribedCount(recordIds.length)
     } catch (error) {
       console.error('[useShareDBSync] Failed to subscribe documents:', error)

@@ -54,7 +54,7 @@ export function EasyGrid(props: EasyGridProps) {
   }, [contextValue.client])
 
   const content = children ?? render?.() ?? (
-    <EasyGridView height={height} />
+    <EasyGridView height={height} allowCreateRecord={allowCreateRecord} />
   )
 
   return (
