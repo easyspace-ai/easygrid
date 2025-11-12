@@ -173,7 +173,7 @@ export interface FieldOptions {
   linkedTableId?: string
   foreignKeyFieldId?: string
   symmetricFieldId?: string
-  relationship?: 'one_to_one' | 'one_to_many' | 'many_to_one' | 'many_to_many'
+  relationship?: 'oneToOne' | 'oneMany' | 'manyOne' | 'manyMany' | 'one_to_one' | 'one_to_many' | 'many_to_one' | 'many_to_many' // 支持两种格式：camelCase 和 snake_case
   isSymmetric?: boolean
   allowMultiple?: boolean
   baseId?: string
@@ -182,6 +182,7 @@ export interface FieldOptions {
   filterConfig?: FilterOptions
   
   // Count字段选项
+  linkFieldId?: string // Count 字段依赖的 Link 字段 ID
   filterExpression?: string
   
   // Duration字段选项

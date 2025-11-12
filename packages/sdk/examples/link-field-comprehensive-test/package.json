@@ -1,0 +1,17 @@
+{
+  "name": "link-field-comprehensive-test",
+  "version": "1.0.0",
+  "description": "Link 字段全面功能测试",
+  "type": "module",
+  "scripts": {
+    "test": "tsx comprehensive-link-field-test.ts"
+  },
+  "dependencies": {
+    "dotenv": "^16.0.0"
+  },
+  "devDependencies": {
+    "tsx": "^4.0.0",
+    "typescript": "^5.0.0"
+  }
+}
+

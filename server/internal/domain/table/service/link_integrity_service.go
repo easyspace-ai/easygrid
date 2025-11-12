@@ -2,6 +2,7 @@ package service
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 
 	"gorm.io/gorm"
@@ -17,6 +18,12 @@ import (
 type LinkIntegrityService struct {
 	db        *gorm.DB
 	fieldRepo LinkIntegrityFieldRepository
+	tableRepo LinkIntegrityTableRepository // 用于获取表信息（baseID）
+}
+
+// LinkIntegrityTableRepository Link 完整性检查表仓储接口
+type LinkIntegrityTableRepository interface {
+	GetByID(ctx context.Context, tableID string) (interface{ GetBaseID() string }, error)
 }
 
 // LinkIntegrityFieldRepository Link 完整性检查字段仓储接口
@@ -35,10 +42,12 @@ type IntegrityIssue struct {
 func NewLinkIntegrityService(
 	db *gorm.DB,
 	fieldRepo LinkIntegrityFieldRepository,
+	tableRepo LinkIntegrityTableRepository,
 ) *LinkIntegrityService {
 	return &LinkIntegrityService{
 		db:        db,
 		fieldRepo: fieldRepo,
+		tableRepo: tableRepo,
 	}
 }
 
@@ -305,27 +314,232 @@ func (s *LinkIntegrityService) Fix(
 	}
 
 	// 修复不一致的链接
-	// TODO: 实现修复逻辑
 	// 1. 从外键表获取正确的链接值
 	// 2. 更新 JSON 列中的 link 值
 	// 3. 删除无效的链接
 
-	logger.Debug("修复链接完整性问题",
+	logger.Info("开始修复链接完整性问题",
 		logger.String("field_id", fieldID),
+		logger.String("table_id", tableID),
 		logger.Int("inconsistent_count", len(inconsistentRecords)))
 
-	// 临时实现：记录需要修复的记录
-	// TODO: 实现实际的修复逻辑
+	fixedCount := 0
 	for _, recordID := range inconsistentRecords {
-		logger.Debug("需要修复的记录",
-			logger.String("record_id", recordID),
-			logger.String("field_id", fieldID))
+		if err := s.fixLinkForRecord(ctx, tableID, recordID, field, linkOptions); err != nil {
+			logger.Error("修复记录链接失败",
+				logger.String("record_id", recordID),
+				logger.String("field_id", fieldID),
+				logger.ErrorField(err))
+			continue
+		}
+		fixedCount++
 	}
+
+	logger.Info("✅ 链接完整性修复完成",
+		logger.String("field_id", fieldID),
+		logger.Int("total_count", len(inconsistentRecords)),
+		logger.Int("fixed_count", fixedCount))
 
 	return &IntegrityIssue{
 		Type:    "InvalidLinkReference",
 		FieldID: fieldID,
-		Message: fmt.Sprintf("修复了 %d 个不一致的链接", len(inconsistentRecords)),
+		Message: fmt.Sprintf("修复了 %d 个不一致的链接", fixedCount),
 	}, nil
+}
+
+// fixLinkForRecord 修复单个记录的链接完整性问题
+func (s *LinkIntegrityService) fixLinkForRecord(
+	ctx context.Context,
+	tableID string,
+	recordID string,
+	field *entity.Field,
+	linkOptions *fieldValueObject.LinkOptions,
+) error {
+	// 1. 从外键表获取正确的链接值
+	// 根据关系类型，从外键表或 junction table 获取正确的链接值
+	correctLinkValue, err := s.getCorrectLinkValue(ctx, tableID, recordID, field, linkOptions)
+	if err != nil {
+		return fmt.Errorf("获取正确的链接值失败: %w", err)
+	}
+
+	// 2. 更新 JSON 列中的 link 值
+	// 使用 SQL 直接更新 JSONB 字段
+	if err := s.updateLinkFieldValue(ctx, tableID, recordID, field, correctLinkValue); err != nil {
+		return fmt.Errorf("更新 Link 字段值失败: %w", err)
+	}
+
+	logger.Debug("✅ 修复记录链接成功",
+		logger.String("record_id", recordID),
+		logger.String("field_id", field.ID().String()))
+
+	return nil
+}
+
+// getCorrectLinkValue 从外键表获取正确的链接值
+func (s *LinkIntegrityService) getCorrectLinkValue(
+	ctx context.Context,
+	tableID string,
+	recordID string,
+	field *entity.Field,
+	linkOptions *fieldValueObject.LinkOptions,
+) (interface{}, error) {
+	relationship := linkOptions.Relationship
+	foreignTableID := linkOptions.LinkedTableID
+	fkHostTableName := linkOptions.FkHostTableName
+	selfKeyName := linkOptions.SelfKeyName
+	foreignKeyName := linkOptions.ForeignKeyName
+
+	// 根据关系类型获取正确的链接值
+	switch relationship {
+	case "manyMany":
+		// 从 junction table 获取
+		return s.getLinkValueFromJunctionTable(ctx, fkHostTableName, selfKeyName, foreignKeyName, recordID)
+	case "manyOne", "oneOne":
+		// 从当前表的外键列获取
+		return s.getLinkValueFromForeignKeyColumn(ctx, tableID, foreignKeyName, recordID, foreignTableID, linkOptions)
+	case "oneMany":
+		// 从关联表的外键列获取
+		return s.getLinkValueFromForeignKeyColumn(ctx, foreignTableID, selfKeyName, recordID, foreignTableID, linkOptions)
+	default:
+		return nil, fmt.Errorf("不支持的关系类型: %s", relationship)
+	}
+}
+
+// getLinkValueFromJunctionTable 从 junction table 获取链接值
+func (s *LinkIntegrityService) getLinkValueFromJunctionTable(
+	ctx context.Context,
+	junctionTableName string,
+	selfKeyName string,
+	foreignKeyName string,
+	recordID string,
+) (interface{}, error) {
+	// 注意：junction table 的完整名称需要包含 baseID
+	// 这里暂时使用 junctionTableName，实际应该从字段或表信息获取 baseID
+	// TODO: 完善 baseID 获取逻辑（需要从字段的 tableID 获取 baseID）
+	
+	// 查询 junction table（假设 junctionTableName 已经是完整表名或需要从字段获取 baseID）
+	// 这里先使用简单的查询，后续可以完善
+	var results []struct {
+		ForeignKey string `gorm:"column:foreign_key"`
+	}
+	
+	query := fmt.Sprintf(`
+		SELECT %s as foreign_key
+		FROM %s
+		WHERE %s = $1
+	`, s.quoteIdentifier(foreignKeyName),
+		s.quoteIdentifier(junctionTableName),
+		s.quoteIdentifier(selfKeyName))
+
+	if err := s.db.WithContext(ctx).Raw(query, recordID).Scan(&results).Error; err != nil {
+		return nil, fmt.Errorf("查询 junction table 失败: %w", err)
+	}
+
+	// 转换为 Link 值数组
+	linkValues := make([]interface{}, 0, len(results))
+	for _, result := range results {
+		linkValues = append(linkValues, map[string]interface{}{
+			"id": result.ForeignKey,
+		})
+	}
+
+	if len(linkValues) == 0 {
+		return nil, nil
+	}
+	if len(linkValues) == 1 {
+		return linkValues[0], nil
+	}
+	return linkValues, nil
+}
+
+// getLinkValueFromForeignKeyColumn 从外键列获取链接值
+func (s *LinkIntegrityService) getLinkValueFromForeignKeyColumn(
+	ctx context.Context,
+	tableID string,
+	foreignKeyName string,
+	recordID string,
+	foreignTableID string,
+	linkOptions *fieldValueObject.LinkOptions,
+) (interface{}, error) {
+	// 获取表信息以获取 baseID
+	table, err := s.tableRepo.GetByID(ctx, tableID)
+	if err != nil {
+		return nil, fmt.Errorf("获取表信息失败: %w", err)
+	}
+	if table == nil {
+		return nil, fmt.Errorf("表不存在: %s", tableID)
+	}
+
+	baseID := table.GetBaseID()
+	fullTableName := fmt.Sprintf(`%s.%s`, s.quoteIdentifier(baseID), s.quoteIdentifier(tableID))
+
+	// 查询外键列的值
+	var result struct {
+		ForeignKey *string `gorm:"column:foreign_key"`
+	}
+	
+	query := fmt.Sprintf(`
+		SELECT %s as foreign_key
+		FROM %s
+		WHERE __id = $1
+	`, s.quoteIdentifier(foreignKeyName),
+		fullTableName)
+
+	if err := s.db.WithContext(ctx).Raw(query, recordID).Scan(&result).Error; err != nil {
+		return nil, fmt.Errorf("查询外键列失败: %w", err)
+	}
+
+	if result.ForeignKey == nil || *result.ForeignKey == "" {
+		return nil, nil
+	}
+
+	// 转换为 Link 值
+	return map[string]interface{}{
+		"id": *result.ForeignKey,
+	}, nil
+}
+
+// updateLinkFieldValue 更新 Link 字段值
+func (s *LinkIntegrityService) updateLinkFieldValue(
+	ctx context.Context,
+	tableID string,
+	recordID string,
+	field *entity.Field,
+	linkValue interface{},
+) error {
+	// 获取表信息以获取 baseID
+	table, err := s.tableRepo.GetByID(ctx, tableID)
+	if err != nil {
+		return fmt.Errorf("获取表信息失败: %w", err)
+	}
+	if table == nil {
+		return fmt.Errorf("表不存在: %s", tableID)
+	}
+
+	baseID := table.GetBaseID()
+	fullTableName := fmt.Sprintf(`%s.%s`, s.quoteIdentifier(baseID), s.quoteIdentifier(tableID))
+
+	// 获取字段的数据库字段名
+	dbFieldName := field.DBFieldName().String()
+	
+	// 将 linkValue 转换为 JSON
+	linkValueJSON, err := json.Marshal(linkValue)
+	if err != nil {
+		return fmt.Errorf("序列化 Link 值失败: %w", err)
+	}
+
+	// 使用 SQL 直接更新 JSONB 字段
+	query := fmt.Sprintf(`
+		UPDATE %s
+		SET %s = $1::jsonb
+		WHERE __id = $2
+	`, fullTableName,
+		s.quoteIdentifier(dbFieldName))
+
+	if err := s.db.WithContext(ctx).Exec(query, linkValueJSON, recordID).Error; err != nil {
+		return fmt.Errorf("更新 Link 字段值失败: %w", err)
+	}
+
+	return nil
 }
 

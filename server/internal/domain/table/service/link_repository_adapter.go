@@ -49,6 +49,11 @@ func (a *LinkFieldRepositoryAdapter) FindByTableID(ctx context.Context, tableID 
 	return a.repo.FindByTableID(ctx, tableID)
 }
 
+// Save 保存字段（用于保存修正后的字段）
+func (a *LinkFieldRepositoryAdapter) Save(ctx context.Context, field *entity.Field) error {
+	return a.repo.Save(ctx, field)
+}
+
 // LinkRecordRepositoryAdapter 适配器：将 RecordRepository 适配为 LinkRecordRepository
 type LinkRecordRepositoryAdapter struct {
 	repo recordRepo.RecordRepository

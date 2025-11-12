@@ -163,7 +163,7 @@ func fieldOptionsToMap(options *fieldVO.FieldOptions) map[string]interface{} {
 
 	// Link 选项
 	if options.Link != nil {
-		result["link"] = map[string]interface{}{
+		linkMap := map[string]interface{}{
 			"linked_table_id":     options.Link.LinkedTableID,
 			"foreign_key_field_id": options.Link.ForeignKeyFieldID,
 			"symmetric_field_id":   options.Link.SymmetricFieldID,
@@ -171,6 +171,18 @@ func fieldOptionsToMap(options *fieldVO.FieldOptions) map[string]interface{} {
 			"is_symmetric":         options.Link.IsSymmetric,
 			"allow_multiple":       options.Link.AllowMultiple,
 		}
+		// ✨ 添加 FkHostTableName、SelfKeyName、ForeignKeyName（用于 junction table 和 foreign key 管理）
+		if options.Link.FkHostTableName != "" {
+			linkMap["fk_host_table_name"] = options.Link.FkHostTableName
+		}
+		if options.Link.SelfKeyName != "" {
+			linkMap["self_key_name"] = options.Link.SelfKeyName
+		}
+		if options.Link.ForeignKeyName != "" {
+			linkMap["foreign_key_name"] = options.Link.ForeignKeyName
+		}
+		result["link"] = linkMap
+		
 		if options.Link.BaseID != "" {
 			result["baseId"] = options.Link.BaseID
 		}

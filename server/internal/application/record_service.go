@@ -245,6 +245,7 @@ func (s *RecordService) CreateRecord(ctx context.Context, req dto.CreateRecordRe
 }
 
 // GetRecord 获取记录详情
+// ✨ 关键修复：在查询时计算虚拟字段（如 Count 字段）
 func (s *RecordService) GetRecord(ctx context.Context, tableID, recordID string) (*dto.RecordResponse, error) {
 	id := valueobject.NewRecordID(recordID)
 
@@ -265,6 +266,36 @@ func (s *RecordService) GetRecord(ctx context.Context, tableID, recordID string)
 			logger.String("table_id", tableID),
 			logger.String("record_id", recordID))
 		return nil, pkgerrors.ErrNotFound.WithDetails("记录不存在")
+	}
+
+	// ✨ 关键修复：计算虚拟字段（如 Count 字段）
+	// 因为虚拟字段的值不保存在数据库中，需要在查询时动态计算
+	if s.calculationService != nil {
+		logger.Info("GetRecord: 开始计算虚拟字段",
+			logger.String("table_id", tableID),
+			logger.String("record_id", recordID))
+		
+		// 预加载字段（只查询一次）
+		fields, err := s.fieldRepo.FindByTableID(ctx, tableID)
+		if err != nil {
+			logger.Warn("GetRecord: 预加载字段失败，跳过虚拟字段计算",
+				logger.String("table_id", tableID),
+				logger.String("record_id", recordID),
+				logger.ErrorField(err))
+		} else {
+			// 计算虚拟字段（使用预加载的字段）
+			if err := s.calculationService.CalculateRecordFieldsWithFields(ctx, record, fields); err != nil {
+				logger.Warn("GetRecord: 计算虚拟字段失败",
+					logger.String("table_id", tableID),
+					logger.String("record_id", recordID),
+					logger.ErrorField(err))
+				// 不中断查询，继续返回记录（即使虚拟字段计算失败）
+			} else {
+				logger.Info("GetRecord: 虚拟字段计算成功",
+					logger.String("table_id", tableID),
+					logger.String("record_id", recordID))
+			}
+		}
 	}
 
 	logger.Info("GetRecord: 查询记录成功",
@@ -459,9 +490,12 @@ func (s *RecordService) UpdateRecord(ctx context.Context, tableID, recordID stri
 					return err
 				}
 				if derivation != nil {
-					// 应用 Link 字段的衍生变更
+					// ✅ 对称字段的更新已在 linkService.updateSymmetricFields 中通过 applySymmetricFieldUpdates 应用
+					// 这里只需要记录日志
+					logger.Info("Link 字段衍生变更已应用",
+						logger.String("record_id", recordID),
+						logger.Int("cell_changes", len(derivation.CellChanges)))
 					for _, cellChange := range derivation.CellChanges {
-						// TODO: 更新记录中的对称字段值
 						logger.Debug("Link 字段衍生变更",
 							logger.String("table_id", cellChange.TableID),
 							logger.String("record_id", cellChange.RecordID),

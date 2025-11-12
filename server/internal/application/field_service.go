@@ -369,6 +369,16 @@ func (s *FieldService) CreateField(ctx context.Context, req dto.CreateFieldReque
 	}
 
 	// 9. 保存字段元数据
+	// ✨ 调试：记录保存前的 Link 字段 Options（特别是 FkHostTableName）
+	if req.Type == "link" && field.Options() != nil && field.Options().Link != nil {
+		logger.Info("CreateField 保存字段前检查 Link Options",
+			logger.String("field_id", field.ID().String()),
+			logger.String("table_id", req.TableID),
+			logger.String("fk_host_table_name", field.Options().Link.FkHostTableName),
+			logger.String("self_key_name", field.Options().Link.SelfKeyName),
+			logger.String("foreign_key_name", field.Options().Link.ForeignKeyName),
+			logger.String("relationship", field.Options().Link.Relationship))
+	}
 	logger.Info("准备保存字段元数据",
 		logger.String("field_id", field.ID().String()),
 		logger.String("table_id", req.TableID),
@@ -427,6 +437,21 @@ func (s *FieldService) CreateField(ctx context.Context, req dto.CreateFieldReque
 		logger.Info("字段创建事件已广播 ✨",
 			logger.String("field_id", field.ID().String()),
 		)
+	}
+
+	// 11. ✨ 如果是 Link 字段且 IsSymmetric=true，自动创建对称字段
+	if req.Type == "link" && field.Options() != nil && field.Options().Link != nil {
+		linkOptions := field.Options().Link
+		if linkOptions.IsSymmetric && linkOptions.SymmetricFieldID == "" {
+			if err := s.createSymmetricField(ctx, field, linkOptions, userID); err != nil {
+				logger.Error("自动创建对称字段失败",
+					logger.String("field_id", field.ID().String()),
+					logger.String("table_id", req.TableID),
+					logger.ErrorField(err))
+				// 注意：对称字段创建失败不影响主字段的创建，只记录错误
+				// 因为主字段已经保存成功，回滚成本较高
+			}
+		}
 	}
 
 	return dto.FromFieldEntity(field), nil
@@ -807,13 +832,100 @@ func (s *FieldService) DeleteField(ctx context.Context, fieldID string) error {
 		}
 	}
 
-	// 5. ✨ 实时推送字段删除事件
+	// 5. ✨ 如果是 Link 字段且存在对称字段，自动删除对称字段
+	if field.Type().String() == "link" && field.Options() != nil && field.Options().Link != nil {
+		linkOptions := field.Options().Link
+		if linkOptions.SymmetricFieldID != "" {
+			if err := s.deleteSymmetricField(ctx, linkOptions.SymmetricFieldID); err != nil {
+				logger.Error("自动删除对称字段失败",
+					logger.String("field_id", fieldID),
+					logger.String("symmetric_field_id", linkOptions.SymmetricFieldID),
+					logger.ErrorField(err))
+				// 注意：对称字段删除失败不影响主字段的删除，只记录错误
+			}
+		}
+	}
+
+	// 6. ✨ 实时推送字段删除事件
 	if s.broadcaster != nil {
 		s.broadcaster.BroadcastFieldDelete(tableID, fieldID)
 		logger.Info("字段删除事件已广播 ✨",
 			logger.String("field_id", fieldID),
 		)
 	}
+
+	return nil
+}
+
+// deleteSymmetricField 删除对称字段
+func (s *FieldService) deleteSymmetricField(ctx context.Context, symmetricFieldID string) error {
+	// 1. 获取对称字段信息
+	fieldIDVO := valueobject.NewFieldID(symmetricFieldID)
+	symmetricField, err := s.fieldRepo.FindByID(ctx, fieldIDVO)
+	if err != nil {
+		return fmt.Errorf("查找对称字段失败: %w", err)
+	}
+	if symmetricField == nil {
+		logger.Warn("对称字段不存在，跳过删除",
+			logger.String("symmetric_field_id", symmetricFieldID))
+		return nil
+	}
+
+	// 2. 获取表信息
+	tableID := symmetricField.TableID()
+	table, err := s.tableRepo.GetByID(ctx, tableID)
+	if err != nil {
+		return fmt.Errorf("获取表信息失败: %w", err)
+	}
+	if table == nil {
+		return fmt.Errorf("表不存在: %s", tableID)
+	}
+
+	// 3. 删除物理表列
+	baseID := table.BaseID()
+	dbFieldName := symmetricField.DBFieldName().String()
+	if s.dbProvider != nil {
+		if err := s.dbProvider.DropColumn(ctx, baseID, tableID, dbFieldName); err != nil {
+			logger.Warn("删除对称字段物理表列失败",
+				logger.String("symmetric_field_id", symmetricFieldID),
+				logger.String("db_field_name", dbFieldName),
+				logger.ErrorField(err))
+			// 继续删除字段元数据
+		}
+	}
+
+	// 4. 如果是 Link 字段，删除 Link 字段 Schema
+	if symmetricField.Type().String() == "link" && symmetricField.Options() != nil && symmetricField.Options().Link != nil {
+		linkOptions := symmetricField.Options().Link
+		foreignTableID := linkOptions.LinkedTableID
+		if foreignTableID != "" {
+			// 转换 LinkOptions 到 LinkFieldOptions
+			linkFieldOptions, err := s.convertToLinkFieldOptions(ctx, tableID, linkOptions, symmetricField)
+			if err == nil {
+				schemaCreator := schema.NewLinkFieldSchemaCreator(s.dbProvider, s.db)
+				if err := schemaCreator.DropLinkFieldSchema(ctx, baseID, tableID, foreignTableID, linkFieldOptions); err != nil {
+					logger.Warn("删除对称字段 Schema 失败",
+						logger.String("symmetric_field_id", symmetricFieldID),
+						logger.ErrorField(err))
+					// 继续删除字段元数据
+				}
+			}
+		}
+	}
+
+	// 5. 删除字段元数据
+	if err := s.fieldRepo.Delete(ctx, fieldIDVO); err != nil {
+		return fmt.Errorf("删除对称字段元数据失败: %w", err)
+	}
+
+	// 6. 广播对称字段删除事件
+	if s.broadcaster != nil {
+		s.broadcaster.BroadcastFieldDelete(tableID, symmetricFieldID)
+	}
+
+	logger.Info("✅ 对称字段自动删除成功",
+		logger.String("symmetric_field_id", symmetricFieldID),
+		logger.String("table_id", tableID))
 
 	return nil
 }
@@ -1270,14 +1382,20 @@ func (s *FieldService) applyCommonFieldOptions(ctx context.Context, field *entit
 				options.Link.ForeignKeyFieldID = foreignKeyFieldID
 			}
 			
-			// 解析数据库实现细节
+			// 解析数据库实现细节（支持 camelCase 和 snake_case）
 			if fkHostTableName, ok := linkData["fkHostTableName"].(string); ok && fkHostTableName != "" {
+				options.Link.FkHostTableName = fkHostTableName
+			} else if fkHostTableName, ok := linkData["fk_host_table_name"].(string); ok && fkHostTableName != "" {
 				options.Link.FkHostTableName = fkHostTableName
 			}
 			if selfKeyName, ok := linkData["selfKeyName"].(string); ok && selfKeyName != "" {
 				options.Link.SelfKeyName = selfKeyName
+			} else if selfKeyName, ok := linkData["self_key_name"].(string); ok && selfKeyName != "" {
+				options.Link.SelfKeyName = selfKeyName
 			}
 			if foreignKeyName, ok := linkData["foreignKeyName"].(string); ok && foreignKeyName != "" {
+				options.Link.ForeignKeyName = foreignKeyName
+			} else if foreignKeyName, ok := linkData["foreign_key_name"].(string); ok && foreignKeyName != "" {
 				options.Link.ForeignKeyName = foreignKeyName
 			}
 		}
@@ -1328,6 +1446,41 @@ func (s *FieldService) applyCommonFieldOptions(ctx context.Context, field *entit
 				logger.String("LookupFieldID", options.Link.LookupFieldID),
 			)
 		}
+
+	case "count":
+		// ✨ Count 字段选项解析
+		if options.Count == nil {
+			options.Count = &valueobject.CountOptions{}
+		}
+		
+		// 解析 count 字段（支持嵌套格式 options.count 或 options.Count）
+		var countData map[string]interface{}
+		if countDataRaw, ok := reqOptions["count"].(map[string]interface{}); ok {
+			countData = countDataRaw
+		} else if countDataRaw, ok := reqOptions["Count"].(map[string]interface{}); ok {
+			countData = countDataRaw
+		}
+		
+		if countData != nil {
+			// 解析 linkFieldId（支持两种格式）
+			if linkFieldID, ok := countData["linkFieldId"].(string); ok && linkFieldID != "" {
+				options.Count.LinkFieldID = linkFieldID
+			} else if linkFieldID, ok := countData["link_field_id"].(string); ok && linkFieldID != "" {
+				options.Count.LinkFieldID = linkFieldID
+			}
+			
+			// 解析 filter
+			if filter, ok := countData["filter"].(string); ok && filter != "" {
+				options.Count.Filter = filter
+			} else if filter, ok := countData["filterExpression"].(string); ok && filter != "" {
+				options.Count.Filter = filter
+			}
+		}
+		
+		logger.Info("Count 字段选项解析完成",
+			logger.String("LinkFieldID", options.Count.LinkFieldID),
+			logger.String("Filter", options.Count.Filter),
+		)
 	}
 
 	// 更新字段的 options
@@ -1400,6 +1553,51 @@ func (s *FieldService) createLinkFieldSchema(
 			logger.String("lookup_field_id", linkOptions.LookupFieldID))
 		// 更新字段的 options
 		field.UpdateOptions(options)
+	}
+
+	// ✨ 将确定的 FkHostTableName、SelfKeyName、ForeignKeyName 保存回字段的 options
+	// 确保这些值被正确保存，以便后续使用
+	needsSave := false
+	if linkOptions.FkHostTableName != linkFieldOptions.FkHostTableName {
+		linkOptions.FkHostTableName = linkFieldOptions.FkHostTableName
+		logger.Info("将确定的 FkHostTableName 保存回字段 options",
+			logger.String("field_id", field.ID().String()),
+			logger.String("fk_host_table_name", linkOptions.FkHostTableName))
+		needsSave = true
+	}
+	if linkOptions.SelfKeyName != linkFieldOptions.SelfKeyName {
+		linkOptions.SelfKeyName = linkFieldOptions.SelfKeyName
+		logger.Info("将确定的 SelfKeyName 保存回字段 options",
+			logger.String("field_id", field.ID().String()),
+			logger.String("self_key_name", linkOptions.SelfKeyName))
+		needsSave = true
+	}
+	if linkOptions.ForeignKeyName != linkFieldOptions.ForeignKeyName {
+		linkOptions.ForeignKeyName = linkFieldOptions.ForeignKeyName
+		logger.Info("将确定的 ForeignKeyName 保存回字段 options",
+			logger.String("field_id", field.ID().String()),
+			logger.String("foreign_key_name", linkOptions.ForeignKeyName))
+		needsSave = true
+	}
+	
+	// ✨ 关键修复：如果字段选项被更新，立即更新字段对象并保存到数据库
+	// 这样可以确保这些重要的数据库实现细节被持久化
+	if needsSave {
+		field.UpdateOptions(options)
+		// ✨ 立即保存字段到数据库，确保 FkHostTableName、SelfKeyName、ForeignKeyName 被持久化
+		if err := s.fieldRepo.Save(ctx, field); err != nil {
+			logger.Error("保存更新后的字段选项失败",
+				logger.String("field_id", field.ID().String()),
+				logger.ErrorField(err))
+			// 注意：这里不返回错误，因为字段选项保存失败不应该阻止 Schema 创建
+			// 但是，记录错误以便后续排查
+		} else {
+			logger.Info("✅ 字段选项已保存到数据库",
+				logger.String("field_id", field.ID().String()),
+				logger.String("fk_host_table_name", linkOptions.FkHostTableName),
+				logger.String("self_key_name", linkOptions.SelfKeyName),
+				logger.String("foreign_key_name", linkOptions.ForeignKeyName))
+		}
 	}
 
 	// 获取关联表信息
@@ -1525,7 +1723,13 @@ func (s *FieldService) convertToLinkFieldOptions(ctx context.Context, currentTab
 	}
 
 	if selfKeyName == "" {
-		selfKeyName = "__id" // 默认使用主键
+		if relationship == "manyMany" {
+			// 对于 manyMany 关系，junction table 中的 selfKeyName 应该是指向当前表的外键列名
+			// 不能使用 __id，因为 junction table 本身已经有 __id 作为主键
+			selfKeyName = fmt.Sprintf("%s_id", currentTableID)
+		} else {
+			selfKeyName = "__id" // 默认使用主键
+		}
 	}
 
 	if foreignKeyName == "" {
@@ -1546,8 +1750,16 @@ func (s *FieldService) convertToLinkFieldOptions(ctx context.Context, currentTab
 					logger.String("relationship", relationship),
 				)
 			}
+		} else if relationship == "manyMany" {
+			// 对于 manyMany 关系，junction table 中的 foreignKeyName 应该是指向关联表的外键列名
+			// 不能使用 __id，因为 junction table 本身已经有 __id 作为主键
+			foreignKeyName = fmt.Sprintf("%s_id", foreignTableID)
+			logger.Info("为 manyMany 关系生成外键列名",
+				logger.String("relationship", relationship),
+				logger.String("foreignKeyName", foreignKeyName),
+			)
 		} else {
-			// 对于 manyMany 和 oneMany 关系，使用 __id 作为外键列名（存储在 junction table 或关联表中）
+			// 对于 oneMany 关系，使用 __id 作为外键列名（存储在关联表中）
 			foreignKeyName = "__id" // 默认使用主键
 		}
 	}
@@ -1686,4 +1898,176 @@ func (s *FieldService) getPrimaryFieldID(ctx context.Context, tableID string) (s
 		logger.Int("fieldCount", len(fields)),
 	)
 	return "", fmt.Errorf("表 %s 中所有字段的ID都为空", tableID)
+}
+
+// createSymmetricField 自动创建对称字段
+// 当创建 Link 字段且 IsSymmetric=true 时，自动在关联表中创建对称字段
+func (s *FieldService) createSymmetricField(
+	ctx context.Context,
+	mainField *entity.Field,
+	linkOptions *valueobject.LinkOptions,
+	userID string,
+) error {
+	// 1. 获取关联表信息
+	foreignTableID := linkOptions.LinkedTableID
+	if foreignTableID == "" {
+		return fmt.Errorf("关联表ID不存在")
+	}
+
+	foreignTable, err := s.tableRepo.GetByID(ctx, foreignTableID)
+	if err != nil {
+		return fmt.Errorf("获取关联表失败: %w", err)
+	}
+	if foreignTable == nil {
+		return fmt.Errorf("关联表不存在: %s", foreignTableID)
+	}
+
+	// 2. 生成对称字段名称（基于主字段名称）
+	mainFieldName := mainField.Name().String()
+	symmetricFieldName := s.generateSymmetricFieldName(mainFieldName, foreignTable.Name().String())
+
+	// 3. 检查对称字段名称是否已存在
+	fieldNameVO, err := valueobject.NewFieldName(symmetricFieldName)
+	if err != nil {
+		return fmt.Errorf("对称字段名称无效: %w", err)
+	}
+
+	exists, err := s.fieldRepo.ExistsByName(ctx, foreignTableID, fieldNameVO, nil)
+	if err != nil {
+		return fmt.Errorf("检查对称字段名称失败: %w", err)
+	}
+	if exists {
+		logger.Warn("对称字段名称已存在，跳过自动创建",
+			logger.String("symmetric_field_name", symmetricFieldName),
+			logger.String("foreign_table_id", foreignTableID))
+		return nil
+	}
+
+	// 4. 构建对称字段的 Link 选项
+	// 对称字段指向主字段所在的表
+	mainTableID := mainField.TableID()
+	symmetricLinkOptions := &valueobject.LinkOptions{
+		LinkedTableID:     mainTableID,
+		Relationship:      s.reverseRelationship(linkOptions.Relationship),
+		IsSymmetric:       true,
+		AllowMultiple:     linkOptions.AllowMultiple,
+		SymmetricFieldID: mainField.ID().String(), // 指向主字段
+		LookupFieldID:    linkOptions.LookupFieldID, // 使用相同的 lookupFieldID
+		BaseID:           linkOptions.BaseID,
+		FilterByViewID:   linkOptions.FilterByViewID,
+		VisibleFieldIDs:  linkOptions.VisibleFieldIDs,
+		Filter:           linkOptions.Filter,
+	}
+
+	// 5. 创建对称字段实例
+	symmetricField, err := s.fieldFactory.CreateFieldWithType(foreignTableID, symmetricFieldName, "link", userID)
+	if err != nil {
+		return fmt.Errorf("创建对称字段实例失败: %w", err)
+	}
+
+	// 设置对称字段的选项
+	symmetricFieldOptions := valueobject.NewFieldOptions()
+	symmetricFieldOptions.Link = symmetricLinkOptions
+	symmetricField.UpdateOptions(symmetricFieldOptions)
+
+	// 6. 计算对称字段的 order
+	maxOrder, err := s.fieldRepo.GetMaxOrder(ctx, foreignTableID)
+	if err != nil {
+		maxOrder = -1
+	}
+	symmetricField.SetOrder(maxOrder + 1)
+
+	// 7. 创建物理表列
+	baseID := foreignTable.BaseID()
+	dbFieldName := symmetricField.DBFieldName().String()
+	dbType := symmetricField.DBFieldType()
+
+	columnDef := database.ColumnDefinition{
+		Name:    dbFieldName,
+		Type:    dbType,
+		NotNull: false,
+		Unique:  false,
+	}
+
+	if err := s.dbProvider.AddColumn(ctx, baseID, foreignTableID, columnDef); err != nil {
+		return fmt.Errorf("创建对称字段物理表列失败: %w", err)
+	}
+
+	// 8. 创建 Link 字段 Schema
+	if err := s.createLinkFieldSchema(ctx, foreignTable, symmetricField); err != nil {
+		// 回滚：删除已创建的物理表列
+		if rollbackErr := s.dbProvider.DropColumn(ctx, baseID, foreignTableID, dbFieldName); rollbackErr != nil {
+			logger.Error("回滚删除对称字段物理表列失败", logger.ErrorField(rollbackErr))
+		}
+		return fmt.Errorf("创建对称字段 Schema 失败: %w", err)
+	}
+
+	// 9. 保存对称字段
+	if err := s.fieldRepo.Save(ctx, symmetricField); err != nil {
+		// 回滚：删除已创建的物理表列和 Schema
+		if rollbackErr := s.dbProvider.DropColumn(ctx, baseID, foreignTableID, dbFieldName); rollbackErr != nil {
+			logger.Error("回滚删除对称字段物理表列失败", logger.ErrorField(rollbackErr))
+		}
+		return fmt.Errorf("保存对称字段失败: %w", err)
+	}
+
+	// 10. 更新主字段的 SymmetricFieldID
+	mainFieldOptions := mainField.Options()
+	if mainFieldOptions == nil {
+		mainFieldOptions = valueobject.NewFieldOptions()
+	}
+	if mainFieldOptions.Link == nil {
+		mainFieldOptions.Link = linkOptions
+	}
+	mainFieldOptions.Link.SymmetricFieldID = symmetricField.ID().String()
+	mainField.UpdateOptions(mainFieldOptions)
+
+	// 11. 保存主字段（更新 SymmetricFieldID）
+	if err := s.fieldRepo.Save(ctx, mainField); err != nil {
+		logger.Warn("更新主字段的 SymmetricFieldID 失败",
+			logger.String("main_field_id", mainField.ID().String()),
+			logger.String("symmetric_field_id", symmetricField.ID().String()),
+			logger.ErrorField(err))
+		// 不影响对称字段的创建，只记录警告
+	}
+
+	// 12. 广播对称字段创建事件
+	if s.broadcaster != nil {
+		s.broadcaster.BroadcastFieldCreate(foreignTableID, symmetricField)
+	}
+
+	logger.Info("✅ 对称字段自动创建成功",
+		logger.String("main_field_id", mainField.ID().String()),
+		logger.String("symmetric_field_id", symmetricField.ID().String()),
+		logger.String("main_table_id", mainTableID),
+		logger.String("foreign_table_id", foreignTableID))
+
+	return nil
+}
+
+// generateSymmetricFieldName 生成对称字段名称
+// 例如：主字段"已选课程" -> 对称字段"选课学生"
+func (s *FieldService) generateSymmetricFieldName(mainFieldName string, foreignTableName string) string {
+	// 简单的命名策略：使用表名 + "列表"
+	// 例如：如果主字段是"已选课程"，对称字段可以是"选课学生"
+	// 这里使用更通用的策略：表名 + "列表"
+	return fmt.Sprintf("%s列表", foreignTableName)
+}
+
+// reverseRelationship 反转关系类型
+// manyMany -> manyMany (不变)
+// manyOne -> oneMany
+// oneMany -> manyOne
+// oneOne -> oneOne (不变)
+func (s *FieldService) reverseRelationship(relationship string) string {
+	switch relationship {
+	case "manyOne":
+		return "oneMany"
+	case "oneMany":
+		return "manyOne"
+	case "manyMany", "oneOne":
+		return relationship
+	default:
+		return relationship
+	}
 }

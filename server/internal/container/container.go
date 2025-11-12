@@ -381,10 +381,13 @@ func (c *Container) initServices() {
 	// 使用适配器将实际仓储接口适配为 LinkService 所需的接口
 	linkFieldRepo := tableService.NewLinkFieldRepositoryAdapter(c.fieldRepository)
 	linkRecordRepo := tableService.NewLinkRecordRepositoryAdapter(c.recordRepository)
+	linkTableRepo := tableService.NewLinkTableRepositoryAdapter(c.tableRepository)
 	c.linkService = tableService.NewLinkService(
 		c.db.GetDB(),
 		linkFieldRepo,
 		linkRecordRepo,
+		linkTableRepo, // ✨ 添加表仓储适配器
+		c.dbProvider,   // ✨ 添加数据库提供者
 	)
 
 	// ✨ Link 字段标题更新服务（在RecordService之前初始化）

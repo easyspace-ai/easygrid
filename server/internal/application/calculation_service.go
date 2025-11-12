@@ -2,6 +2,7 @@ package application
 
 import (
 	"context"
+	"fmt"
 	"regexp"
 	"sync"
 	"time"
@@ -742,25 +743,51 @@ func (s *CalculationService) calculateCount(
 ) (interface{}, error) {
 	// 1. 获取Count配置
 	options := field.Options()
-	if options == nil || options.Link == nil {
+	if options == nil || options.Count == nil {
+		logger.Warn("⚠️ Count 字段配置未找到",
+			logger.String("field_id", field.ID().String()),
+			logger.String("field_name", field.Name().String()),
+			logger.Bool("options_is_nil", options == nil),
+			logger.Bool("count_options_is_nil", options != nil && options.Count == nil))
 		return nil, errors.ErrValidationFailed.WithDetails("count options not configured")
 	}
 
-	// 使用Link字段配置（当前实现）
-	// 未来改进：定义专门的CountOptions配置
-	linkFieldID := options.Link.LinkedTableID
+	// ✨ 关键修复：从 CountOptions 中获取 LinkFieldID
+	linkFieldID := options.Count.LinkFieldID
+	if linkFieldID == "" {
+		logger.Warn("⚠️ Count 字段的 LinkFieldID 为空",
+			logger.String("field_id", field.ID().String()),
+			logger.String("field_name", field.Name().String()))
+		return 0, nil // 如果没有配置 LinkFieldID，返回 0
+	}
+
+	logger.Info("🧮 计算 Count 字段",
+		logger.String("field_id", field.ID().String()),
+		logger.String("field_name", field.Name().String()),
+		logger.String("link_field_id", linkFieldID))
 
 	// 2. 获取Link字段的值
 	recordData := record.Data().ToMap()
 	linkValue := recordData[linkFieldID]
 
 	if linkValue == nil {
+		logger.Info("Count 字段：Link 字段值为空，返回 0",
+			logger.String("field_id", field.ID().String()),
+			logger.String("link_field_id", linkFieldID))
 		return 0, nil
 	}
 
 	// 3. 统计关联记录数量
 	linkedRecordIDs := s.extractRecordIDs(linkValue)
-	return len(linkedRecordIDs), nil
+	count := len(linkedRecordIDs)
+	
+	logger.Info("✅ Count 字段计算完成",
+		logger.String("field_id", field.ID().String()),
+		logger.String("field_name", field.Name().String()),
+		logger.String("link_field_id", linkFieldID),
+		logger.Int("count", count))
+	
+	return count, nil
 }
 
 // ==================== 辅助方法 ====================
@@ -936,8 +963,28 @@ func (s *CalculationService) buildDependencyGraph(fields []*fieldEntity.Field) [
 
 		case "count":
 			// Count依赖于Link字段
-			// 当前实现：使用Link配置作为workaround
-			// 未来改进：从Count配置中获取linkFieldID
+			// ✨ 关键修复：从 CountOptions 中获取 LinkFieldID
+			options := field.Options()
+			if options != nil && options.Count != nil {
+				if options.Count.LinkFieldID != "" {
+					items = append(items, dependency.GraphItem{
+						FromFieldID: options.Count.LinkFieldID,
+						ToFieldID:   field.ID().String(),
+					})
+					logger.Info("✅ 添加 Count 字段依赖",
+						logger.String("count_field_id", field.ID().String()),
+						logger.String("count_field_name", field.Name().String()),
+						logger.String("link_field_id", options.Count.LinkFieldID))
+				} else {
+					logger.Warn("⚠️ Count 字段的 LinkFieldID 为空",
+						logger.String("count_field_id", field.ID().String()),
+						logger.String("count_field_name", field.Name().String()))
+				}
+			} else {
+				logger.Warn("⚠️ Count 字段配置为空",
+					logger.String("count_field_id", field.ID().String()),
+					logger.String("count_field_name", field.Name().String()))
+			}
 		}
 	}
 
@@ -1030,6 +1077,10 @@ func (s *CalculationService) extractFormulaDependencies(field *fieldEntity.Field
 }
 
 // extractRecordIDs 从Link字段值中提取Record IDs
+// ✨ 关键修复：支持 Link 字段值的多种格式
+// 1. 字符串数组：["rec_xxx", "rec_yyy"]
+// 2. 对象数组：[{"id": "rec_xxx", "title": "..."}, {"id": "rec_yyy", "title": "..."}]
+// 3. 单个字符串："rec_xxx"
 func (s *CalculationService) extractRecordIDs(linkValue interface{}) []string {
 	if linkValue == nil {
 		return []string{}
@@ -1037,18 +1088,34 @@ func (s *CalculationService) extractRecordIDs(linkValue interface{}) []string {
 
 	switch v := linkValue.(type) {
 	case string:
+		// 单个字符串，直接返回
 		return []string{v}
 	case []string:
+		// 字符串数组，直接返回
 		return v
 	case []interface{}:
+		// 对象数组或混合数组，需要提取 id
 		result := make([]string, 0, len(v))
 		for _, item := range v {
 			if id, ok := item.(string); ok {
+				// 如果是字符串，直接使用
 				result = append(result, id)
+			} else if obj, ok := item.(map[string]interface{}); ok {
+				// 如果是对象，提取 id 字段
+				if id, exists := obj["id"].(string); exists && id != "" {
+					result = append(result, id)
+				}
 			}
 		}
+		logger.Info("extractRecordIDs 从对象数组提取 Record IDs",
+			logger.Int("input_count", len(v)),
+			logger.Int("output_count", len(result)),
+			logger.Strings("record_ids", result))
 		return result
 	default:
+		logger.Warn("extractRecordIDs 未知的 Link 字段值类型",
+			logger.String("type", fmt.Sprintf("%T", linkValue)),
+			logger.Any("value", linkValue))
 		return []string{}
 	}
 }

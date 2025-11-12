@@ -5,6 +5,8 @@ import (
 	"testing"
 
 	"github.com/easyspace-ai/luckdb/server/internal/domain/fields/entity"
+	"github.com/easyspace-ai/luckdb/server/internal/domain/fields/factory"
+	fieldValueObject "github.com/easyspace-ai/luckdb/server/internal/domain/fields/valueobject"
 	"github.com/easyspace-ai/luckdb/server/internal/domain/table/valueobject"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/mock"
@@ -75,7 +77,7 @@ func TestLinkService_GetDerivateByLink(t *testing.T) {
 	mockRecordRepo := new(MockRecordRepository)
 
 	// 创建 LinkService
-	linkService := NewLinkService(db, mockFieldRepo, mockRecordRepo)
+	linkService := NewLinkService(db, mockFieldRepo, mockRecordRepo, nil, nil)
 
 	// 测试用例：空变更上下文
 	ctx := context.Background()
@@ -127,7 +129,7 @@ func TestLinkService_saveForeignKeyForManyMany(t *testing.T) {
 	// 创建 LinkService
 	mockFieldRepo := new(MockFieldRepository)
 	mockRecordRepo := new(MockRecordRepository)
-	linkService := NewLinkService(db, mockFieldRepo, mockRecordRepo)
+	linkService := NewLinkService(db, mockFieldRepo, mockRecordRepo, nil, nil)
 
 	// 创建 LinkFieldOptions
 	linkOptions, err := valueobject.NewLinkFieldOptions(
@@ -180,7 +182,7 @@ func TestLinkService_saveForeignKeyForManyOne(t *testing.T) {
 	// 创建 LinkService
 	mockFieldRepo := new(MockFieldRepository)
 	mockRecordRepo := new(MockRecordRepository)
-	linkService := NewLinkService(db, mockFieldRepo, mockRecordRepo)
+	linkService := NewLinkService(db, mockFieldRepo, mockRecordRepo, nil, nil)
 
 	// 创建 LinkFieldOptions
 	linkOptions, err := valueobject.NewLinkFieldOptions(
@@ -241,3 +243,159 @@ func TestLinkService_extractRecordIDs(t *testing.T) {
 	assert.Equal(t, []string{"rec_001"}, ids)
 }
 
+
+// TestLinkService_updateSymmetricFields_ManyMany 测试多对多关系的对称字段同步
+func TestLinkService_updateSymmetricFields_ManyMany(t *testing.T) {
+	// 创建内存数据库
+	db, err := gorm.Open(sqlite.Open(":memory:"), &gorm.Config{})
+	assert.NoError(t, err)
+
+	// 创建模拟仓储
+	mockFieldRepo := new(MockFieldRepository)
+	mockRecordRepo := new(MockRecordRepository)
+
+	// 创建 LinkService
+	linkService := NewLinkService(db, mockFieldRepo, mockRecordRepo, nil, nil)
+
+	ctx := context.Background()
+	tableID := "table_001"
+	foreignTableID := "table_002"
+	var fieldID string
+	var symmetricFieldID string
+	recordID := "rec_001"
+
+	// 创建主字段
+	fieldFactory := factory.NewFieldFactory()
+	mainField, err := fieldFactory.CreateFieldWithType(
+		tableID,
+		"关联字段",
+		fieldValueObject.TypeLink,
+		"user_001",
+	)
+	assert.NoError(t, err)
+	fieldID = mainField.ID().String() // 使用生成的 ID
+
+	// 设置 Link 选项
+	options := fieldValueObject.NewFieldOptions()
+	options.Link = &fieldValueObject.LinkOptions{
+		LinkedTableID:    foreignTableID,
+		Relationship:     "manyMany",
+		SymmetricFieldID: symmetricFieldID,
+		LookupFieldID:    "lookup_field_001",
+	}
+	mainField.UpdateOptions(options)
+
+	// 创建对称字段
+	symmetricField, err := fieldFactory.CreateFieldWithType(
+		foreignTableID,
+		"对称字段",
+		fieldValueObject.TypeLink,
+		"user_001",
+	)
+	assert.NoError(t, err)
+	symmetricFieldID = symmetricField.ID().String() // 使用生成的 ID
+
+	// 设置模拟期望
+	mockFieldRepo.On("FindByID", ctx, fieldID).Return(mainField, nil)
+	mockFieldRepo.On("FindByID", ctx, symmetricFieldID).Return(symmetricField, nil)
+
+	// 模拟获取记录（用于计算 lookup title）
+	mockRecordRepo.On("FindByIDs", ctx, tableID, []string{recordID}).Return(map[string]map[string]interface{}{
+		recordID: {
+			"lookup_field_001": "标题值",
+		},
+	}, nil)
+
+	// 模拟获取对称字段的旧值
+	mockRecordRepo.On("FindByIDs", ctx, foreignTableID, mock.Anything).Return(map[string]map[string]interface{}{
+		"rec_002": {
+			symmetricFieldID: nil, // 旧值为空
+		},
+	}, nil)
+
+	// 模拟批量更新对称字段
+	mockRecordRepo.On("BatchUpdateFields", ctx, foreignTableID, mock.Anything).Return(nil)
+
+	// 创建外键记录映射
+	fkRecordMap := FkRecordMap{
+		fieldID: {
+			recordID: &FkRecordItem{
+				OldKey: nil,
+				NewKey: []string{"rec_002"},
+			},
+		},
+	}
+
+	fieldMap := map[string]*entity.Field{
+		fieldID: mainField,
+	}
+
+	linkContexts := []LinkCellContext{
+		{
+			RecordID: recordID,
+			FieldID:  fieldID,
+			OldValue: nil,
+			NewValue: []interface{}{
+				map[string]interface{}{"id": "rec_002"},
+			},
+		},
+	}
+
+	// 执行更新对称字段
+	cellChanges, err := linkService.updateSymmetricFields(ctx, tableID, fieldMap, fkRecordMap, linkContexts)
+
+	// 验证结果
+	assert.NoError(t, err)
+	assert.NotNil(t, cellChanges)
+	assert.Greater(t, len(cellChanges), 0, "应该有对称字段的变更")
+
+	// 验证所有模拟调用
+	mockFieldRepo.AssertExpectations(t)
+	mockRecordRepo.AssertExpectations(t)
+}
+
+// TestLinkService_applySymmetricFieldUpdates 测试应用对称字段更新
+func TestLinkService_applySymmetricFieldUpdates(t *testing.T) {
+	// 创建内存数据库
+	db, err := gorm.Open(sqlite.Open(":memory:"), &gorm.Config{})
+	assert.NoError(t, err)
+
+	// 创建模拟仓储
+	mockFieldRepo := new(MockFieldRepository)
+	mockRecordRepo := new(MockRecordRepository)
+
+	// 创建 LinkService
+	linkService := NewLinkService(db, mockFieldRepo, mockRecordRepo, nil, nil)
+
+	ctx := context.Background()
+
+	// 创建单元格变更
+	cellChanges := []CellChange{
+		{
+			TableID:  "table_001",
+			RecordID: "rec_001",
+			FieldID:  "field_001",
+			OldValue: nil,
+			NewValue: map[string]interface{}{"id": "rec_002"},
+		},
+		{
+			TableID:  "table_001",
+			RecordID: "rec_002",
+			FieldID:  "field_001",
+			OldValue: map[string]interface{}{"id": "rec_001"},
+			NewValue: nil,
+		},
+	}
+
+	// 模拟批量更新
+	mockRecordRepo.On("BatchUpdateFields", ctx, "table_001", mock.Anything).Return(nil)
+
+	// 执行应用更新
+	err = linkService.applySymmetricFieldUpdates(ctx, cellChanges)
+
+	// 验证结果
+	assert.NoError(t, err)
+
+	// 验证所有模拟调用
+	mockRecordRepo.AssertExpectations(t)
+}
