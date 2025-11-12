@@ -1,0 +1,67 @@
+{
+  "initialSpaceName": "Espace de {{name}}",
+  "action": {
+    "createBase": "Créer une base",
+    "createSpace": "Créer un espace",
+    "invite": "Inviter"
+  },
+  "allSpaces": "Tous les espaces",
+  "spaceIsEmpty": "Cet espace est vide",
+  "baseModal": {
+    "copy": "Copier",
+    "duplicate": "Dupliquer \"{{baseName}}\"",
+    "createBaseFromTemplate": "Créer une base à partir d'un modèle",
+    "duplicateRecords": "Dupliquer les enregistrements",
+    "duplicateRecordsTip": "Votre historique des révisions et vos collaborateurs ne seront pas dupliqués.",
+    "toSpace": "Vers l'espace",
+    "copyToSpace": "Copier vers l'espace",
+    "duplicateBase": "Dupliquer la base",
+    "missTargetTip": "Veuillez sélectionner un espace pour dupliquer la base.",
+    "copying": "Duplication de la base, cela peut prendre un certain temps...",
+    "copyingTemplate": "Création de la base à partir d'un modèle, cela peut prendre un certain temps...",
+    "howToCreate": "Comment souhaitez-vous commencer ?",
+    "fromScratch": "À partir de zéro",
+    "fromTemplate": "À partir d'un modèle",
+    "moveBaseToAnotherSpace": "Déplacer {{baseName}} vers un autre espace",
+    "chooseSpace": "Choisir un espace"
+  },
+  "spaceSetting": {
+    "title": "Paramètres de l'espace",
+    "general": "Général",
+    "collaborators": "Collaborateurs",
+    "generalDescription": "Modifiez ici les paramètres de votre espace actuel",
+    "collaboratorDescription": "Gérez les collaborateurs de votre espace et définissez leurs permissions d'accès",
+    "spaceName": "Nom de l'espace",
+    "spaceId": "ID de l'espace"
+  },
+  "pin": {
+    "add": "Ajouter aux favoris",
+    "remove": "Retirer des favoris",
+    "pin": "Épingler",
+    "empty": "Vos bases et espaces favoris apparaîtront ici"
+  },
+  "tip": {
+    "delete": "Êtes-vous sûr de vouloir supprimer <0/> ?",
+    "title": "Conseils",
+    "exportTips1": "Exporter la base actuelle en fichier .tea, ce qui peut prendre un certain temps. Vous pouvez vérifier les résultats d'exportation dans le centre de notifications.",
+    "exportTips2": "Vous pouvez importer le fichier .tea dans espace -> plus -> importer",
+    "exportTips3": "Les champs de relation inter-base seront convertis en texte sur une seule ligne.",
+    "exportIncludeDataLabel": "Inclure les enregistrements",
+    "exportIncludeDataDescription": "Désactivez pour exporter uniquement la structure et la configuration.",
+    "moveBaseSuccessTitle": "Déplacement réussi",
+    "moveBaseSuccessDescription": "{{baseName}} a été déplacé avec succès vers {{spaceName}}"
+  },
+  "deleteSpaceModal": {
+    "title": "Supprimer l'espace",
+    "blockedTitle": "Impossible de supprimer cet espace",
+    "blockedDesc": "Cet espace a un abonnement actif. Veuillez annuler l'abonnement avant de supprimer l'espace.",
+    "permanentDeleteWarning": "Cette action supprimera définitivement toutes les ressources et données de l'espace actuel. Veuillez procéder avec prudence !",
+    "confirmInputLabel": "Veuillez taper DELETE pour confirmer la suppression"
+  },
+  "integration": {
+    "title": "Intégrations",
+    "description": "Gérer les intégrations de votre espace",
+    "addIntegration": "Ajouter une intégration",
+    "ai": "IA"
+  }
+}

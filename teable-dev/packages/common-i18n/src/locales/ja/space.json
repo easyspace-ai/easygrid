@@ -1,0 +1,72 @@
+{
+  "initialSpaceName": "{{name}}のスペース",
+  "action": {
+    "createBase": "ベースの作成",
+    "createSpace": "スペースの作成",
+    "invite": "招待"
+  },
+  "allSpaces": "すべてのスペース",
+  "spaceIsEmpty": "このスペースは空です",
+  "baseModal": {
+    "copy": "コピー",
+    "duplicate": "\"{{baseName}}\" の複製",
+    "createBaseFromTemplate": "テンプレートからベースを作成する",
+    "duplicateRecords": "レコードの複製",
+    "duplicateRecordsTip": "変更履歴と共同作業者は複製しません。",
+    "toSpace": "スペースへ",
+    "copyToSpace": "スペースにコピー",
+    "duplicateBase": "ベースを複製",
+    "missTargetTip": "ベースを複製するスペースを選択してください。",
+    "copying": "ベースを複製しています。時間がかかる場合があります...",
+    "copyingTemplate": "テンプレートからベースを作成しています。時間がかかる場合があります...",
+    "howToCreate": "どのように始めますか？",
+    "fromScratch": "最初から",
+    "fromTemplate": "テンプレートから",
+    "moveBaseToAnotherSpace": "{{baseName}} を別のスペースに移動する",
+    "chooseSpace": "スペースを選択"
+  },
+  "spaceSetting": {
+    "title": "スペースの設定",
+    "general": "全般",
+    "collaborators": "共同作業者",
+    "generalDescription": "現在のスペースの設定をここで変更",
+    "collaboratorDescription": "スペースの共同作業者を管理し、アクセス権限を設定します",
+    "spaceName": "スペース名",
+    "spaceId": "スペースID"
+  },
+  "pin": {
+    "add": "ピンに追加",
+    "remove": "ピンから削除",
+    "pin": "ピン",
+    "empty": "ピン留めしたベースとスペースがここに表示されます"
+  },
+  "tip": {
+    "delete": "<0/> を削除してもよろしいですか?",
+    "title": "ヒント",
+    "exportTips1": "現在のベースを.teaファイルとしてエクスポートします。これには時間がかかる場合があります。エクスポート結果は通知センターで確認できます。",
+    "exportTips2": "スペース -> その他 -> インポートから.teaファイルをインポートできます",
+    "exportTips3": "ベース間の関連フィールドは単一行テキストに変換されます。",
+    "exportIncludeDataLabel": "レコードを含める",
+    "exportIncludeDataDescription": "オフにすると構造と設定のみをエクスポートします。",
+    "moveBaseSuccessTitle": "移動成功",
+    "moveBaseSuccessDescription": "{{baseName}}は{{spaceName}}に正常に移動されました"
+  },
+  "deleteSpaceModal": {
+    "title": "スペースを削除",
+    "blockedTitle": "このスペースを削除できません",
+    "blockedDesc": "このスペースにはアクティブなサブスクリプションがあります。スペースを削除する前にサブスクリプションをキャンセルしてください。",
+    "permanentDeleteWarning": "この操作により、現在のスペース内のすべてのリソースとデータが永久に削除されます。慎重に進めてください！",
+    "confirmInputLabel": "削除を確認するには DELETE と入力してください"
+  },
+  "sharedBase": {
+    "title": "共有ベース",
+    "description": "共有されたベースはここに表示されます",
+    "empty": "共有ベースはまだありません"
+  },
+  "integration": {
+    "title": "インテグレーション",
+    "description": "空間のインテグレーションを管理",
+    "addIntegration": "インテグレーションを追加",
+    "ai": "AI"
+  }
+}

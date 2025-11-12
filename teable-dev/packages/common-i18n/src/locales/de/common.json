@@ -1,0 +1,574 @@
+{
+  "actions": {
+    "title": "Aktionen",
+    "add": "Hinzufügen",
+    "save": "Speichern",
+    "doNotSave": "Nicht speichern",
+    "submit": "Abschicken",
+    "confirm": "Bestätigen",
+    "close": "Schließen",
+    "edit": "Bearbeiten",
+    "fill": "Ausfüllen",
+    "update": "Aktualisieren",
+    "create": "Erstellen",
+    "delete": "Löschen",
+    "cancel": "Abbrechen",
+    "zoomIn": "Vergrößern",
+    "zoomOut": "Verkleinern",
+    "back": "Zurück",
+    "remove": "Entfernen",
+    "removeConfig": "Konfiguration entfernen",
+    "saveSucceed": "Speichern erfolgreich!",
+    "submitSucceed": "Abschicken erfolgreich!",
+    "editSucceed": "Bearbeiten erfolgreich!",
+    "updateSucceed": "Aktualisieren erfolgreich!",
+    "deleteSucceed": "Löschen erfolgreich!",
+    "resetSucceed": "Papierkorb erfolgreich gelöscht!",
+    "restoreSucceed": "Wiederherstellen erfolgreich!",
+    "loading": "Lade...",
+    "refreshPage": "Seite aktualisieren",
+    "yesDelete": "Ja, lösche",
+    "rename": "Umbenennen",
+    "duplicate": "Duplizieren",
+    "change": "Ändern",
+    "upgrade": "Upgrade",
+    "search": "Suche",
+    "loadMore": "Mehr laden",
+    "collapseSidebar": "Seitenleiste einklappen",
+    "restore": "Wiederherstellen",
+    "permanentDelete": "Permanent löschen",
+    "globalSearch": "Globale Suche",
+    "fieldSearch": "Suche nach Feld",
+    "tableIndex": "Index",
+    "showAllRow": "Zeige alle Reihen",
+    "hideNotMatchRow": "Nicht übereinstimmende Zeile ausblenden",
+    "more": "Mehr",
+    "move": "Verschieben nach",
+    "turnOn": "Einschalten",
+    "exit": "Ausloggen",
+    "next": "Nächste",
+    "previous": "Vorherige"
+  },
+  "quickAction": {
+    "title": "Schnelle Aktionen...",
+    "placeHolder": "Geben Sie einen Befehl ein oder suchen Sie..."
+  },
+  "password": {
+    "setInvalid": "Das Passwort ist ungültig, besteht aus mindestens 8 Zeichen und muss mindestens einen Buchstaben und eine Zahl enthalten."
+  },
+  "template": {
+    "aiTitle": "Lass uns zusammen bauen",
+    "aiSubTitle": "Die erste KI-Plattform, auf der Teams gemeinsam an Daten arbeiten und Produktions-Apps erstellen",
+    "guideTitle": "Beginnen Sie mit Ihrem Szenario",
+    "watchVideo": "Video ansehen",
+    "title": "Vorlage",
+    "description": "Erstellen Sie eine neue Datenbank aus einer Vorlage",
+    "browseAll": "Alle durchsuchen",
+    "templateTitle": "Mit Vorlage beginnen",
+    "loadMore": "Mehr laden",
+    "allTemplatesLoaded": "Alle Vorlagen geladen",
+    "createTemplate": "Vorlage erstellen",
+    "promptBox": {
+      "placeholder": "Erstellen Sie Ihre Business-App mit Teable",
+      "start": "Starten",
+      "carouselGuides": {
+        "guide1": "Quittungen einfügen → Teable bitten, Schlüsseldaten automatisch zu extrahieren",
+        "guide2": "Erstellen Sie ein KI-CRM mit Lead- und Follow-up-Tabellen",
+        "guide3": "Kundenfeedback einfügen → Teable bitten, Erkenntnisse zu finden und Berichte zu erstellen",
+        "guide4": "Erstellen Sie einen Projekt-Tracker mit Aufgaben und Fristen",
+        "guide5": "Leads-Tabelle einfügen → Teable bitten, ein intelligentes CRM zu erstellen",
+        "guide6": "Erstellen Sie einen Content-Planer mit Beiträgen und Veröffentlichungsdaten",
+        "guide7": "Lebensläufe einfügen → Teable bitten, Kandidaten zu organisieren und vorzusortieren"
+      }
+    }
+  },
+  "settings": {
+    "title": "Einstellungen",
+    "back": "Zurück zum Start",
+    "account": {
+      "title": "Mein Profil",
+      "tab": "Mein Konto",
+      "updatePhoto": "Photo aktualisieren",
+      "updateNameDesc": "Ihr Name wird bei Beiträgen und Erwähnungen angezeigt. Sie können ihn jederzeit ändern.",
+      "securityTitle": "Konto Sicherheit",
+      "email": "E-Mail",
+      "password": "Passwort",
+      "passwordDesc": "Legen Sie ein dauerhaftes Passwort für die Anmeldung bei Ihrem Konto fest.",
+      "changePassword": {
+        "title": "Passwort ändern",
+        "desc": "Bitte geben Sie Ihr aktuelles Passwort und Ihr neues Passwort ein.",
+        "current": "Geben Sie Ihr aktuelles Passwort ein",
+        "new": "Geben Sie Ihr neues Passwort ein",
+        "confirm": "Bestätigen Sie Ihr neues Passwort"
+      },
+      "changePasswordError": {
+        "disMatch": "Ihr neues Passwort stimmt nicht überein.",
+        "equal": "Ihr neues Passwort muss sich von Ihrem aktuellen Passwort unterscheiden.",
+        "invalid": "Ihr aktuelles Passwort ist ungültig."
+      },
+      "changePasswordSuccess": {
+        "title": "🎉 Passwort erfolgreich geändert.",
+        "desc": "Sie werden in 2 Sekunden auf die Anmeldeseite weitergeleitet."
+      },
+      "manageToken": "Zugriffs-Token",
+      "addPassword": {
+        "title": "Passwort hinzufügen",
+        "desc": "Legen Sie ein dauerhaftes Passwort für die Anmeldung bei Ihrem Konto fest.",
+        "password": "Geben Sie Ihr Passwort ein",
+        "confirm": "Bestätigen Sie Ihr Passwort"
+      },
+      "addPasswordError": {
+        "disMatch": "Ihr Passwort stimmt nicht überein."
+      },
+      "addPasswordSuccess": {
+        "title": "🎉 Passwort erfolgreich hinzugefügt."
+      },
+      "changeEmail": {
+        "title": "E-Mail aktualisieren",
+        "desc": "Bitte geben Sie Ihr aktuelles Passwort und Ihre neue E-Mail-Adresse ein.",
+        "current": "Geben Sie Ihr aktuelles Passwort ein",
+        "new": "Geben Sie Ihre neue E-Mail ein",
+        "code": "Geben Sie den Verifizierungscode ein",
+        "getCode": "Verifizierungscode erhalten",
+        "error": {
+          "invalidCode": "Der Verifizierungscode ist ungültig.",
+          "invalidPassword": "Das Passwort ist ungültig.",
+          "invalidConflict": "Die neue E-Mail ist bereits registriert.",
+          "invalidSameEmail": "Die neue E-Mail ist die gleiche wie die aktuelle."
+        },
+        "success": {
+          "title": "🎉 E-Mail erfolgreich geändert.",
+          "desc": "Sie werden in 2 Sekunden auf die Anmeldeseite weitergeleitet.",
+          "sendSuccess": "Überprüfungscode erfolgreich gesendet."
+        }
+      }
+    },
+    "notify": {
+      "title": "Meine Benachrichtigungen",
+      "label": "Aktivität in Ihrem Space",
+      "desc": "Sie erhalten E-Mails, wenn Sie Kommentare, Erwähnungen, Seiteneinladungen, Erinnerungen, Zugriffsanfragen und Eigentumsänderungen erhalten."
+    },
+    "setting": {
+      "title": "Meine Einstellungen",
+      "theme": "Theme",
+      "themeDesc": "Wählen Sie das Theme für die App.",
+      "dark": "Dunkel",
+      "light": "Hell",
+      "system": "System",
+      "version": "App Version",
+      "language": "Sprache",
+      "interactionMode": "Interaktionsmodus",
+      "mouseMode": "Cursor-Modus",
+      "touchMode": "Touch-Modus",
+      "systemMode": "Systemeinstellung folgen"
+    },
+    "nav": {
+      "settings": "Einstellungen",
+      "logout": "Ausloggen",
+      "contactSupport": "Support kontaktieren"
+    },
+    "integration": {
+      "title": "Integrationen",
+      "description": "Sie haben {{count}} Anwendungen Zugriff auf Ihr Konto gewährt.",
+      "lastUsed": "Zuletzt verwendet am {{date}}",
+      "revoke": "Widerrufen",
+      "owner": "Im Besitz von {{user}}",
+      "revokeTitle": "Sind Sie sicher, dass Sie die Genehmigung widerrufen wollen?",
+      "revokeDesc": "{{name}} wird nicht mehr auf die Teable-API zugreifen können. Sie können diese Aktion nicht rückgängig machen.",
+      "scopeTitle": "Berechtigungen",
+      "scopeDesc": "Diese Anwendung wird die folgenden Bereiche abrufen können:"
+    }
+  },
+  "noun": {
+    "table": "Tabelle",
+    "view": "Ansicht",
+    "space": "Space",
+    "base": "Base",
+    "field": "Feld",
+    "record": "Datensatz",
+    "dashboard": "Dashboard",
+    "automation": "Automatisierung",
+    "authorityMatrix": "Authority Matrix",
+    "adminPanel": "Admin Panel",
+    "license": "Lizenz",
+    "instanceId": "Instanz ID",
+    "beta": "Beta",
+    "trash": "Papierkorb",
+    "global": "Global",
+    "organizationPanel": "Organization Panel",
+    "unknownError": "Unbekannter Fehler"
+  },
+  "level": {
+    "free": "Free",
+    "plus": "Plus",
+    "pro": "Pro",
+    "enterprise": "Enterprise"
+  },
+  "noResult": "Kein Ergebnis.",
+  "untitled": "Ohne Titel",
+  "name": "Name",
+  "description": "Beschreibung",
+  "required": "Notwendig",
+  "atLeastOne": "Reservieren Sie zumindest ein {{noun}}",
+  "guide": {
+    "prev": "Vorherige",
+    "next": "Nächste",
+    "done": "Erledigt",
+    "skip": "Überspringen",
+    "createSpaceTooltipTitle": "Einen Space erstellen",
+    "createSpaceTooltipContent": "Teable ist in Spaces gegliedert, die zur Zusammenarbeit einladen.<br></br>Die Spaces in Teable dienen als primäres Navigationselement in der Menüleiste und bieten eine grundlegende Plattform für Benutzer, die Datenbanken nach Bedarf hinzufügen und verwalten möchten.",
+    "createBaseTooltipTitle": "Eine Base erstellen",
+    "createBaseTooltipContent": "Eine Base (kurz für \"database\") ist ein Ort, an dem wichtige Daten und die davon abhängigen Arbeitsabläufe gespeichert werden.",
+    "createTableTooltipTitle": "Eine Tabelle erstellen",
+    "createTableTooltipContent": "Tabellen sind für den effizienten Umgang mit verschiedenen Datensätzen konzipiert und bieten eine vielseitige Anzeige von Informationen durch verschiedene Datentypen.",
+    "createViewTooltipTitle": "Eine Ansicht erstellen",
+    "createViewTooltipContent": "Gegenwärtig können Benutzer Raster-, Galerie-, Kanban- und Formularansichten erstellen, wobei Kalenderansichten für zukünftige Versionen geplant sind. <br></br>Durch diese Vielfalt verfügen die Benutzer über ein umfassendes Toolkit für verschiedene Datenverwaltungsaufgaben.",
+    "viewFilteringTooltipTitle": "Datensätze filtern",
+    "viewFilteringTooltipContent": "Eine der Hauptfunktionen von Ansichten ist die Möglichkeit, Datensätze aus einer Ansicht entsprechend den von Ihnen festgelegten Bedingungen herauszufiltern. <br></br>Wenn ein Datensatz auf der Grundlage einer Bedingung herausgefiltert wird, wird er nicht gelöscht, sondern nur aus der Ansicht ausgeblendet, die Sie für die Anzeige Ihrer Tabelle verwenden.",
+    "viewSortingTooltipTitle": "Datensätze sortieren",
+    "viewSortingTooltipContent": "In einer Ansicht können Sie Ihre Datensätze so sortieren, dass sie in einer bestimmten Reihenfolge nach den Werten in bestimmten Feldern erscheinen. <br></br>Das Sortieren Ihrer Datensätze in einer Ansicht wirkt sich nicht auf die Reihenfolge der Datensätze in anderen Ansichten aus - es gilt nur für die Ansicht, in der Sie gerade Ihre Tabelle betrachten.",
+    "viewGroupingTooltipTitle": "Datensätze gruppieren",
+    "viewGroupingTooltipContent": "Die Gruppierung von Datensätzen ermöglicht es den Erstellern, eine oder mehrere Bedingungen festzulegen, die zur Kategorisierung des Datensatzes beitragen, der in einer bestimmten Ansicht dargestellt wird.",
+    "apiButtonTooltipTitle": "API",
+    "apiButtonTooltipContent": "Teable bietet eine leistungsstarke API, die fast alle Produktfunktionen unterstützt und es Entwicklern ermöglicht, Aufrufe mit einem <a>Token</a> zu tätigen."
+  },
+  "token": "Token",
+  "poweredBy": "Powered by <0></0>",
+  "invite": {
+    "dialog": {
+      "title": "{{spaceName}} Space teilen",
+      "desc_one": "Dieser Space hat <b>{{count}} Kollaborateure</b>. Das Hinzufügen eines Space Kollaborateurs gibt ihm Zugang zu allen Bases in diesem Space.",
+      "desc_other": "Dieser Space hat <b>{{count}} Kollaborateure</b>. Das Hinzufügen eines Space Kollaborateurs gibt ihm Zugang zu allen Bases in diesem Space.",
+      "tabEmail": "Per E-Mail einladen",
+      "emailPlaceholder": "Weitere Kollaborateure per E-Mail einladen",
+      "tabLink": "Per Link einladen",
+      "linkPlaceholder": "Erstellen Sie einen Einladungslink, der jedem, der ihn öffnet, <0/> Zugang gewährt.",
+      "emailSend": "Einladung senden",
+      "linkSend": "Link erstellen",
+      "spaceTitle": "Space Kollaborateure",
+      "collaboratorSearchPlaceholder": "Finde einen Space Kollaborateur via Name oder E-Mail",
+      "collaboratorJoin": "beigetreten am {{joinTime}}",
+      "collaboratorRemove": "Kollaborateur entfernen",
+      "linkTitle": "Einladungslinks",
+      "linkCreatedTime": "erstellt am {{createdTime}}",
+      "linkCopySuccess": "Link kopiert",
+      "linkRemove": "Link entfernen"
+    },
+    "base": {
+      "title": "{{baseName}} teilen",
+      "desc_one": "Diese Base wird mit {{count}} Kollaborateur geteilt.",
+      "desc_other": "Diese Base wird mit {{count}} Kollaborateuren geteilt.",
+      "baseTitle": "Base Kollaborateure",
+      "collaboratorSearchPlaceholder": "Finde einen Base Kollaborateur via Name oder E-Mail"
+    },
+    "addOrgCollaborator": {
+      "title": "Organisationskollaborateur hinzufügen",
+      "placeholder": "Organisationskollaborateur oder Abteilung auswählen"
+    }
+  },
+  "help": {
+    "title": "Hilfe",
+    "apiLink": "https://help.teable.ai/en/api-doc/token"
+  },
+  "pagePermissionChangeTip": "Die Berechtigungen für die Seite wurden aktualisiert. Bitte aktualisieren Sie die Seite, um den neuesten Inhalt zu sehen.",
+  "listEmptyTips": "Die Liste ist leer",
+  "billing": {
+    "overLimits": "Limits überschritten",
+    "overLimitsDescription": "Ihr aktuelles Abonnement hat sein Nutzungslimit überschritten. Bitte aktualisieren Sie Ihr Abonnement, um diese Funktion weiterhin ohne Unterbrechung nutzen zu können.",
+    "userLimitExceededDescription": "Die aktuelle Instanz hat die maximale Anzahl von Benutzern erreicht, die Ihre Lizenz erlaubt. Bitte deaktivieren Sie einige Benutzer oder aktualisieren Sie die Lizenz.",
+    "unavailableInPlanTips": "Der aktuelle Abonnementplan unterstützt diese Funktion nicht",
+    "unavailableConnectionTips": "Die Datenbankverbindungsfunktion wird in Zukunft entfernt und ist nur in der Enterprise-Edition von öffentlicher Cloud und selbstgehosteten Versionen verfügbar.",
+    "levelTips": "Dieser Space befindet sich derzeit auf dem {{level}} Plan",
+    "licenseExpiredGracePeriod": "Ihre Self-Hosted-Lizenz ist abgelaufen und wird am {{expiredTime}} auf den kostenlosen Plan herabgestuft. Bitte aktualisieren Sie Ihre Lizenz umgehend, um Zugriff auf Premium-Funktionen zu behalten.",
+    "spaceSubscriptionModal": {
+      "title": "Upgrade des Space-Abonnementplans",
+      "description": "Sie können nur Arbeitsbereiche aktualisieren, deren Eigentümer Sie sind."
+    },
+    "status": {
+      "active": "Aktiv",
+      "canceled": "Storniert",
+      "incomplete": "Unvollständig",
+      "incompleteExpired": "Unvollständig Abgelaufen",
+      "trialing": "Testphase",
+      "pastDue": "Überfällig",
+      "unpaid": "Unbezahlt",
+      "paused": "Pausiert",
+      "seatLimitExceeded": "Anzahl der Sitzplätze überschritten"
+    }
+  },
+  "admin": {
+    "setting": {
+      "description": "Ändern Sie die Einstellungen für Ihre aktuelle Instanz",
+      "allowSignUp": "Erstellen neuer Konten zulassen",
+      "allowSignUpDescription": "Wenn Sie diese Option deaktivieren, werden neue Benutzerregistrierungen verhindert, und die Schaltfläche „Registrieren“ wird nicht mehr auf der Anmeldeseite angezeigt.",
+      "allowSpaceInvitation": "Erlauben Sie das Versenden von Space-Einladungen",
+      "allowSpaceInvitationDescription": "Die Deaktivierung dieser Option verhindert, dass andere Benutzer als Administratoren andere Benutzer zu Spaces einladen können. Wenn Sie diese Option aktivieren, können direkt eingeladene Benutzer ein Konto erstellen, auch wenn die Registrierung neuer Konten deaktiviert ist.",
+      "allowSpaceCreation": "Jedem die Möglichkeit geben, neue Space anzulegen",
+      "allowSpaceCreationDescription": "Wenn Sie diese Option deaktivieren, können andere Benutzer als Administratoren keine neuen Spaces erstellen.",
+      "enableEmailVerification": "Aktivieren der E-Mail-Überprüfung",
+      "enableEmailVerificationDescription": "Die Aktivierung dieser Option erfordert, dass Benutzer ihre E-Mail-Adresse bei der Erstellung eines neuen Kontos verifizieren.",
+      "enableWaitlist": "Aktivieren Sie die Warteliste",
+      "enableWaitlistDescription": "Wenn Sie diese Option aktivieren, können Benutzer sich nur mit einem Einladungscode registrieren.",
+      "generalSettings": "Allgemeine Einstellungen",
+      "aiSettings": "AI Konfiguration",
+      "brandingSettings": {
+        "title": "Branding-Einstellungen",
+        "description": "Nur in der Enterprise Edition verfügbar",
+        "logo": "Logo",
+        "logoDescription": "Das Logo ist Ihre Markenidentität in Teable.",
+        "logoUpload": "Logo hochladen",
+        "logoUploadDescription": "Logo-Bild hochladen, unterstützt PNG, JPEG-Format, empfohlene Größe ist 100x100px. Maximale Upload-Größe ist 500KB."
+      },
+      "ai": {
+        "name": "Name",
+        "nameDescription": "Der Name des LLM-Anbieters",
+        "enable": "AI aktivieren",
+        "enableDescription": "Aktivieren Sie AI für die aktuelle Instanz, dann können alle Benutzer die AI-Funktionen nutzen.",
+        "updateLLMProvider": "LLM-Anbieter aktualisieren",
+        "addProvider": "LLM-Anbieter hinzufügen",
+        "addProviderDescription": "Einen neuen LLM-Anbieter zur Liste hinzufügen",
+        "providerType": "Anbietertyp",
+        "baseUrl": "Basis-URL",
+        "apiKey": "API Schlüssel",
+        "baseUrlDescription": "Die Basis-URL des LLM-Anbieters",
+        "apiKeyDescription": "Der API-Schlüssel des LLM-Anbieters",
+        "models": "Modelle",
+        "modelsDescription": "Die vom LLM-Anbieter unterstützten Modelle",
+        "baseUrlRequired": "Basis-URL ist erforderlich",
+        "fetchModelListError": "Modellliste konnte nicht abgerufen werden",
+        "provider": "LLM-Anbieter",
+        "providerDescription": "Der zu verwendende LLM-Anbieter",
+        "modelPreferences": "Modellpräferenzen",
+        "modelPreferencesDescription": "Die Modellpräferenzen für den LLM-Anbieter",
+        "embeddingModel": "Einbettungsmodell",
+        "embeddingModelDescription": "Optional, normalerweise enthält die Modell-ID \"embedding\"",
+        "translationModel": "Übersetzungsmodell",
+        "translationModelDescription": "Das zu verwendende Übersetzungsmodell",
+        "chatModel": "Chat-Modell",
+        "chatModelDescription": "Das zu verwendende Chat-Modell, Tipp: Das mittlere Kodierungsmodell wird standardmäßig für AI-Formelgenerierung und verwandte Funktionen verwendet",
+        "chatModels": {
+          "sm": "Kleines Chat-Modell",
+          "smDescription": "Wird für Aufgaben wie Szenenempfehlungen und einfache schnelle Operationen verwendet",
+          "md": "Mittleres Chat-Modell",
+          "mdDescription": "Für Szenarien, die Geschwindigkeit und Qualität erfordern, wie z.B. das Erstellen einer Datenbank, wird die Verwendung von GPT-4o empfohlen",
+          "lg": "Erweiteres Chat-Modell",
+          "lgDescription": "Für Planung, Kodierung und andere komplexe Aufgabenszenarien wird die Verwendung von claude-sonnet-4 empfohlen"
+        },
+        "chatModelTest": {
+          "text": "Modell testen",
+          "description": "Testen Sie die Fähigkeit des Modells, Bilder und PDFs zu verarbeiten",
+          "notConfigLgModel": "Bitte konfigurieren Sie zuerst das große Modell",
+          "confirmTitle": "Modellfähigkeiten testen",
+          "confirmDescription": "Möchten Sie die Fähigkeiten des großen Chat-Modells testen?",
+          "confirm": "Modell testen",
+          "cancel": "Abbrechen",
+          "missingCapabilitiesWarning": "Dieses Modell unterstützt keine Bild- oder PDF-Verarbeitung, was dazu führen kann, dass einige Funktionen nicht verfügbar sind.",
+          "enableAITitle": "AI aktivieren",
+          "enableAIDescription": "Modelltest abgeschlossen. AI ist derzeit nicht aktiviert. Möchten Sie AI aktivieren, um diese Modellfähigkeiten zu nutzen?",
+          "enableAI": "AI aktivieren",
+          "skipTest": "Überspringen"
+        },
+        "chatModelAbility": {
+          "image": "Bild",
+          "pdf": "PDF",
+          "webSearch": "Websuche",
+          "disabledWebSearch": "Websuche deaktiviert",
+          "lgModelAbility": "Große Modellfähigkeit"
+        },
+        "configUpdated": "AI-Konfiguration aktualisiert",
+        "noModelFound": "Kein Modell gefunden.",
+        "searchModel": "Suche Modell...",
+        "selectModel": "Wähle Modell...",
+        "input": "Eingabe {{ratio}}",
+        "output": "Ausgabe {{ratio}}",
+        "inputOrOutputTip": "Das Verhältnis stellt den Wechselkurs zwischen Credits und Tokens dar. Beispielsweise bedeutet „1:1000“, dass 1 Credit ungefähr 1000 Tokens entspricht.<br></br>Hinweis: Bei jeder Nutzung wird mindestens 1 Credit abgezogen. Auch wenn der tatsächliche Verbrauch weniger als 1 Credit beträgt, wird er dennoch als 1 Credit abgerechnet.",
+        "imageOutput": "Pro Bild {{credits}}",
+        "imageOutputTip": "Bildgenerierung erfordert Credits, jedes Bild verbraucht {{credits}} Credits",
+        "supportImageOutputTip": "Dieses Modell unterstützt Bildgenerierung",
+        "supportVisionTip": "Dieses Modell unterstützt Bildeingabe",
+        "supportAudioTip": "Dieses Modell unterstützt Audioeingabe",
+        "supportVideoTip": "Dieses Modell unterstützt Videoeingabe",
+        "supportDeepThinkTip": "Dieses Modell unterstützt tiefes Denken",
+        "testConnection": "Test",
+        "testing": "Testen...",
+        "testSuccess": "Test erfolgreich",
+        "testFailed": "Test fehlgeschlagen",
+        "fillRequiredFields": "Bitte füllen Sie alle erforderlichen Felder aus",
+        "modelsRequired": "Bitte füllen Sie mindestens ein Modell aus",
+        "noValidModel": "Kein gültiges Modell gefunden",
+        "addCustomModel": "Benutzerdefiniertes Modell hinzufügen",
+        "isOpenRouter": "OpenRouter"
+      },
+      "webSearch": {
+        "description": "Konfigurieren Sie den Firecrawl API-Schlüssel, um die Websuchfunktion zu aktivieren. Gehen Sie zu <a>Firecrawl-Einstellungen</a>, um den API-Schlüssel zu erhalten"
+      }
+    },
+    "action": {
+      "enterApiKey": "API-Schlüssel eingeben",
+      "goToConfiguration": "Zur Konfiguration gehen"
+    },
+    "tips": {
+      "thankYouForUsingTeable": "Vielen Dank für die Nutzung von teable",
+      "pleaseGoToConfiguration": "Bitte gehen Sie zur Einstellungsseite, um einige anfängliche Konfigurationen abzuschließen, um die volle Funktionalität und bessere Benutzererfahrung von teable zu genießen",
+      "pleaseContactAdmin": "Bitte wenden Sie sich an den Administrator"
+    },
+    "configuration": {
+      "title": "Ausstehende Konfiguration",
+      "description": "Schließen Sie diese Konfigurationen ab, um vollständige Funktionen zu erhalten",
+      "copyInstance": "ID kopieren",
+      "list": {
+        "publicOrigin": {
+          "title": "PUBLIC_ORIGIN Umgebungsvariable",
+          "description": "Ihre <strong>PUBLIC_ORIGIN</strong> Umgebungsvariablenkonfiguration stimmt nicht mit der aktuellen Zugriffsadresse <underline>https://example.com</underline> überein. Import von xlsx, csv und Anhangfeldfunktionen funktionieren möglicherweise nicht ordnungsgemäß. Es wird empfohlen, sie auf <underline>https://example.com</underline> zu setzen"
+        },
+        "https": {
+          "title": "HTTPS aktivieren",
+          "description": "Sie haben HTTPS nicht aktiviert. Die großmaßstäbliche Kopierfunktion (300 Zeilen oder mehr) ist nicht verfügbar. Es wird empfohlen, sie zu aktivieren."
+        },
+        "databaseProxy": {
+          "title": "PUBLIC_DATABASE_PROXY Umgebungsvariable",
+          "description": "<strong>PUBLIC_DATABASE_PROXY</strong> ist nicht konfiguriert. Die externe Datenbankverbindungsfunktion ist nicht verfügbar. Bitte beachten Sie das <a>Hilfedokument</a>",
+          "href": "https://help.teable.ai/de/deploy/database-connection#enable-external-database-connection"
+        },
+        "llmApi": {
+          "title": "LLM API",
+          "description": "Sie haben die AI LLM API noch nicht konfiguriert. AI Chat/AI Automatisierung kann nicht verwendet werden, <anchor>zu den Einstellungen gehen</anchor>",
+          "errorTips": "Sie haben die AI LLM API noch nicht konfiguriert. AI Chat/AI Automatisierung kann nicht verwendet werden"
+        },
+        "app": {
+          "title": "App-Generierung",
+          "description": "Sie haben die v0 API noch nicht konfiguriert. Die App-Generierungsfunktion ist nicht verfügbar, <anchor>zu den Einstellungen gehen</anchor>",
+          "errorTips": "Sie haben die v0 API noch nicht konfiguriert. Die App-Generierungsfunktion ist nicht verfügbar"
+        },
+        "webSearch": {
+          "title": "Websuche",
+          "description": "Sie haben die Websuche-API noch nicht konfiguriert. Die Websuchfunktion ist nicht verfügbar, <anchor>zu den Einstellungen gehen</anchor>",
+          "errorTips": "Sie haben die Websuche-API noch nicht konfiguriert. Die Websuchfunktion ist nicht verfügbar"
+        },
+        "email": {
+          "title": "E-Mail",
+          "description": "E-Mail nicht konfiguriert. Selbstbedienungs-Passwort-Wiederherstellung und E-Mail-Benachrichtigungsfunktion sind nicht verfügbar, <anchor>zu den Einstellungen gehen</anchor>",
+          "errorTips": "E-Mail nicht konfiguriert. Selbstbedienungs-Passwort-Wiederherstellung, E-Mail-Verifizierung/Benachrichtigungsfunktion sind nicht verfügbar"
+        }
+      }
+    }
+  },
+  "notification": {
+    "title": "Benachrichtigungen",
+    "unread": "Ungelesen",
+    "read": "Gelesen",
+    "markAs": "Markieren Sie diese Meldung als {{status}}",
+    "markAllAsRead": "Alles als gelesen markieren",
+    "noUnread": "Keine Benachrichtigungen mit Status: {{status}}",
+    "changeSetting": "Einstellungen für Seitenbenachrichtigungen ändern",
+    "new": "{{count}} neue",
+    "showMore": "Zeige mehr"
+  },
+  "role": {
+    "title": {
+      "owner": "Eigentümer",
+      "creator": "Ersteller",
+      "editor": "Editor",
+      "commenter": "Kommentator",
+      "viewer": "Betrachter"
+    },
+    "description": {
+      "owner": "Vollständige Konfiguration und Bearbeitung von Bases, Automatisierungen, Authority Matrizen und Verwaltung von Space Einstellungen und Abrechnung",
+      "creator": "Vollständige Konfiguration und Bearbeitung von Bases, Automatisierungen und Authority Matrizen",
+      "editor": "Kann Datensätze und Ansichten bearbeiten, aber keine Tabellen oder Felder konfigurieren",
+      "commenter": "Kann Datensätze kommentieren",
+      "viewer": "Kann nicht bearbeiten oder kommentieren"
+    }
+  },
+  "trash": {
+    "type": "Typ",
+    "resetTrash": "Papierkorb leeren",
+    "deletedBy": "Gelöscht von",
+    "deletedTime": "Gelöscht Zeit",
+    "fromSpace": "Von \"{{name}}\" Space",
+    "permanentDeleteTips": "Sind Sie sicher, dass Sie \"{{name}}\" {{resource}}? dauerhaft löschen möchten",
+    "resetTrashConfirm": "Sind Sie sicher, dass Sie den Papierkorb leeren wollen?",
+    "addToTrash": "In den Papierkorb verschieben",
+    "description": "Daten im Papierkorb belegen immer noch Speicherplatz für Datensätze und Anhänge."
+  },
+  "pluginCenter": {
+    "pluginUrlEmpty": "Plugin hat keine Url",
+    "install": "Installieren",
+    "publisher": "Herausgeber",
+    "lastUpdated": "Zuletzt aktualisiert",
+    "pluginNotFound": "Plugin nicht gefunden",
+    "pluginEmpty": {
+      "title": "Noch keine Plugins"
+    }
+  },
+  "automation": {
+    "turnOnTip": "Möchten Sie die aktuelle Automatisierung einschalten?"
+  },
+  "email": {
+    "send": "Senden",
+    "config": "E-Mail-Konfiguration",
+    "customConfig": "Benutzerdefinierter E-Mail-Server",
+    "notify": "Benachrichtigungs-E-Mail",
+    "automation": "Automatisierungs-E-Mail",
+    "customNotifyConfig": "Benutzerdefinierte Benachrichtigungs-E-Mail-Konfiguration",
+    "customAutomationConfig": "Benutzerdefinierte Automatisierungs-E-Mail-Konfiguration",
+    "addConfig": "Konfiguration hinzufügen",
+    "editConfig": "Konfiguration bearbeiten",
+    "resetConfig": "Zurücksetzen",
+    "testEmail": "Test-E-Mail",
+    "testEmailPlaceholder": "Bitte Test-E-Mail eingeben",
+    "testEmailError": "Bitte korrekte Test-E-Mail-Adresse eingeben",
+    "testEmailSend": "Test-E-Mail erfolgreich gesendet, bitte überprüfen Sie Ihr E-Mail-Postfach",
+    "configError": "Bitte korrekte E-Mail-Konfiguration eingeben",
+    "host": "Server-Adresse",
+    "hostDescription": "Bitte SMTP-E-Mail-Server-Adresse eingeben, zum Beispiel: smtp.example.com",
+    "port": "Port",
+    "secure": "SSL/TLS",
+    "auth": "Authentifizierung",
+    "username": "Benutzername",
+    "password": "Passwort",
+    "sender": "Absender-Adresse",
+    "senderName": "Absender-Name",
+    "subscribe": "Abonnieren",
+    "unsubscribe": "Abbestellen",
+    "unsubscribeList": "Abbestellliste",
+    "unsubscribeTime": "Abbestellzeit",
+    "processing": "Verarbeitung...",
+    "unsubscribeH1": "Abmeldung bestätigen?",
+    "unsubscribeH2": "Sie sind dabei, sich von zukünftigen Teable-Werbeaktionen und Produktaktualisierungen abzumelden. Möchten Sie sich wirklich abmelden?",
+    "subscribeH1": "Abonnement bestätigen?",
+    "subscribeH2": "Sie sind dabei, zukünftige Teable-Werbeaktionen und Produktaktualisierungen zu abonnieren. Möchten Sie wirklich abonnieren?",
+    "unsubscribeListTip": "Die folgenden Benutzer in der aktuellen Basis haben sich abgemeldet, Sie können ihnen keine E-Mails mehr senden. Beim Importieren von E-Mails platzieren Sie bitte die E-Mail-Adressen in der ersten Spalte und benennen Sie die Kopfzeile \"email\"."
+  },
+  "waitlist": {
+    "title": "Warteliste",
+    "email": "E-Mail",
+    "joinTitle": "Wir skalieren schnell, um die Nachfrage zu befriedigen",
+    "joinDesc": "Warten Sie auf die Liste — wir werden Sie benachrichtigen, sobald wir bereit sind",
+    "emailPlaceholder": "Geben Sie Ihre E-Mail-Adresse ein...",
+    "youAreOnTheList": "Sie sind auf der Liste!",
+    "thanksForJoining": "Vielen Dank für Ihre Registrierung auf der Warteliste. Wir werden Sie benachrichtigen, sobald wir bereit sind.",
+    "back": "Zurück",
+    "inviteCodePlaceholder": "Geben Sie Ihre Einladungscode ein",
+    "join": "Warten Sie auf die Liste",
+    "joining": "Beitritt...",
+    "invite": "Einladen",
+    "inviteTime": "Einladungszeit",
+    "createdTime": "Beitrittszeit",
+    "yes": "Ja",
+    "no": "Nein",
+    "generateCode": "Einladungscode generieren",
+    "count": "Anzahl",
+    "times": "Verfügbare Anzahl",
+    "generate": "Generieren",
+    "code": "Einladungscode",
+    "inviteSuccess": "Einladung erfolgreich",
+    "app": {
+      "previewAppError": "Anwendungsfehler",
+      "sendErrorToAI": "Fehler an AI senden"
+    }
+  },
+  "base": {
+    "deleteTip": "Sind Sie sicher, dass Sie \"{{name}}\" Base löschen möchten?"
+  }
+}
