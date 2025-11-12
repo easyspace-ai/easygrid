@@ -17,6 +17,7 @@ import (
 type SQLLogger struct {
 	zapLogger *zap.Logger
 	config    logger.Config
+	monitor   *QueryMonitor // 查询性能监控器（可选）
 }
 
 // NewSQLLogger 创建新的SQL日志记录器
@@ -24,7 +25,13 @@ func NewSQLLogger(zapLogger *zap.Logger, config logger.Config) *SQLLogger {
 	return &SQLLogger{
 		zapLogger: zapLogger,
 		config:    config,
+		monitor:   nil, // 默认不启用监控
 	}
+}
+
+// SetMonitor 设置查询监控器
+func (l *SQLLogger) SetMonitor(monitor *QueryMonitor) {
+	l.monitor = monitor
 }
 
 // LogMode 设置日志模式
@@ -62,16 +69,21 @@ func (l *SQLLogger) Trace(ctx context.Context, begin time.Time, fc func() (strin
 	}
 
 	elapsed := time.Since(begin)
+	sql, rows := fc()
+	
+	// ✅ 记录到查询监控器
+	if l.monitor != nil {
+		l.monitor.RecordQuery(ctx, sql, elapsed, rows, err)
+	}
+
 	switch {
 	case err != nil && l.config.LogLevel >= logger.Error:
-		sql, rows := fc()
 		l.logSQL("❌ SQL Error", sql, rows, elapsed, err)
 		// 同时写入独立的SQL日志文件
 		if appLogger.SQLLogger != nil {
 			appLogger.SQLLogger.LogSQL(sql, nil, elapsed, rows, err)
 		}
 	case elapsed > l.config.SlowThreshold && l.config.SlowThreshold != 0 && l.config.LogLevel >= logger.Warn:
-		sql, rows := fc()
 		l.logSQL("🐌 Slow Query", sql, rows, elapsed, nil)
 		// 同时写入独立的SQL日志文件
 		if appLogger.SQLLogger != nil {
@@ -79,7 +91,6 @@ func (l *SQLLogger) Trace(ctx context.Context, begin time.Time, fc func() (strin
 		}
 	case l.config.LogLevel >= logger.Info:
 		// 当日志级别为 Info 或更低时，记录所有SQL查询
-		sql, rows := fc()
 		l.logSQL("🔍 SQL Query", sql, rows, elapsed, nil)
 		// 同时写入独立的SQL日志文件
 		if appLogger.SQLLogger != nil {

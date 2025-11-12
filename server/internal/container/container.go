@@ -808,6 +808,9 @@ func (c *Container) initInfrastructureServices() {
 	c.batchService = application.NewBatchService(
 		c.fieldRepository,
 		c.recordRepository,
+		c.tableRepository,
+		c.dbProvider,
+		c.db.GetDB(),
 		c.errorService,
 	)
 

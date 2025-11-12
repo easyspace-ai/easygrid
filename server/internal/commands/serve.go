@@ -85,6 +85,14 @@ func runServe(version string) error {
 		logger.String("mode", cfg.Server.Mode),
 	)
 
+	// ✅ 安全优化：生产环境强制启用权限检查
+	if cfg.Server.Mode == "production" && cfg.Server.PermissionsDisabled {
+		logger.Fatal("权限检查在生产环境中不能禁用",
+			logger.String("mode", cfg.Server.Mode),
+			logger.Bool("permissions_disabled", cfg.Server.PermissionsDisabled))
+		return fmt.Errorf("permissions cannot be disabled in production mode")
+	}
+
 	if cfg.SQLLogger.Enabled {
 		logger.Info("SQL Logger enabled",
 			logger.String("output", cfg.SQLLogger.OutputPath),

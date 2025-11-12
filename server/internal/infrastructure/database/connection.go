@@ -16,7 +16,8 @@ import (
 
 // Connection 数据库连接结构
 type Connection struct {
-	DB *gorm.DB
+	DB      *gorm.DB
+	Monitor *QueryMonitor // 查询性能监控器
 }
 
 // NewConnection 创建新的数据库连接
@@ -77,11 +78,24 @@ func NewConnection(cfg config.DatabaseConfig) (*Connection, error) {
 	sqlDB.SetMaxIdleConns(cfg.MaxIdleConns)
 	sqlDB.SetMaxOpenConns(cfg.MaxOpenConns)
 	sqlDB.SetConnMaxLifetime(cfg.ConnMaxLifetime)
-	sqlDB.SetConnMaxIdleTime(10 * time.Minute) // 空闲连接最大存活时间
+	// ✅ 优化：使用配置的空闲连接超时时间，如果未配置则使用默认值
+	if cfg.ConnMaxIdleTime > 0 {
+		sqlDB.SetConnMaxIdleTime(cfg.ConnMaxIdleTime)
+	} else {
+		sqlDB.SetConnMaxIdleTime(30 * time.Minute) // 默认30分钟
+	}
 
 	// 测试连接
 	if err := sqlDB.Ping(); err != nil {
 		return nil, fmt.Errorf("failed to ping database: %w", err)
+	}
+
+	// 创建查询监控器
+	monitor := NewQueryMonitor(200*time.Millisecond, 100) // 慢查询阈值200ms，最多保存100条
+	
+	// 将监控器注入到 SQL Logger
+	if sqlLogger, ok := gormConfig.Logger.(*SQLLogger); ok {
+		sqlLogger.SetMonitor(monitor)
 	}
 
 	appLogger.Info("Database connected successfully",
@@ -90,7 +104,7 @@ func NewConnection(cfg config.DatabaseConfig) (*Connection, error) {
 		appLogger.String("database", cfg.Name),
 	)
 
-	return &Connection{DB: db}, nil
+	return &Connection{DB: db, Monitor: monitor}, nil
 }
 
 // Close 关闭数据库连接

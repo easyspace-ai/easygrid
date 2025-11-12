@@ -5,6 +5,7 @@ import (
 	"database/sql"
 	"encoding/json"
 	"fmt"
+	"strconv"
 	"time"
 
 	"gorm.io/datatypes"
@@ -859,24 +860,57 @@ func (r *RecordRepositoryDynamic) List(ctx context.Context, filter recordRepo.Re
 		query = query.Where("__last_modified_by = ?", *filter.UpdatedBy)
 	}
 
-	// 应用排序
+	// ✅ 优化：应用排序（使用索引优化）
 	if filter.OrderBy != "" {
 		orderDir := "ASC"
 		if filter.OrderDir == "desc" {
 			orderDir = "DESC"
 		}
-		query = query.Order(fmt.Sprintf("%s %s", filter.OrderBy, orderDir))
+		// 如果使用游标分页，优先使用 __auto_number 排序（性能更好）
+		if filter.Cursor != "" {
+			query = query.Order(fmt.Sprintf("__auto_number %s", orderDir))
+		} else {
+			query = query.Order(fmt.Sprintf("%s %s", filter.OrderBy, orderDir))
+		}
 	} else {
-		// 默认按创建时间倒序
-		query = query.Order("__created_time DESC")
+		// 默认按创建时间倒序（使用索引）
+		// ✅ 优化：如果使用游标分页，使用 __auto_number 排序（性能更好）
+		if filter.Cursor != "" {
+			query = query.Order("__auto_number ASC")
+		} else {
+			query = query.Order("__created_time DESC")
+		}
 	}
 
-	// 应用分页
-	if filter.Limit > 0 {
-		query = query.Limit(filter.Limit)
-	}
-	if filter.Offset > 0 {
+	// ✅ 优化：使用游标分页代替偏移分页（提高大偏移量查询性能）
+	if filter.Cursor != "" {
+		// 使用游标分页（基于 __auto_number）
+		cursorID, err := strconv.ParseInt(filter.Cursor, 10, 64)
+		if err == nil {
+			query = query.Where("__auto_number > ?", cursorID)
+		} else {
+			logger.Warn("游标解析失败，使用偏移分页",
+				logger.String("cursor", filter.Cursor),
+				logger.ErrorField(err))
+		}
+	} else if filter.Offset > 0 {
+		// 如果偏移量过大（> 1000），建议使用游标分页
+		if filter.Offset > 1000 {
+			logger.Warn("大偏移量查询，建议使用游标分页",
+				logger.Int("offset", filter.Offset),
+				logger.String("table_id", tableID))
+		}
 		query = query.Offset(filter.Offset)
+	}
+
+	// 应用分页限制
+	if filter.Limit > 0 {
+		// ✅ 优化：游标分页时多查询一条记录，用于判断是否有下一页
+		if filter.Cursor != "" {
+			query = query.Limit(filter.Limit + 1)
+		} else {
+			query = query.Limit(filter.Limit)
+		}
 	}
 
 	// 查询记录列表

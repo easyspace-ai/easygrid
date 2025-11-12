@@ -118,6 +118,33 @@ func (p *PostgresProvider) CreatePhysicalTable(ctx context.Context, schemaName, 
 		}
 	}
 
+	// ✅ 优化：为物理表创建常用查询索引
+	// 1. __created_by 索引（用于按创建者查询）
+	idxCreatedByName := fmt.Sprintf("%s_%s_created_by", schemaName, tableName)
+	createCreatedByIndexSQL := fmt.Sprintf(
+		"CREATE INDEX IF NOT EXISTS %s ON %s (__created_by)",
+		p.quoteIdentifier(idxCreatedByName),
+		fullTableName,
+	)
+	if err := p.db.WithContext(ctx).Exec(createCreatedByIndexSQL).Error; err != nil {
+		logger.Warn("创建 __created_by 索引失败或已存在",
+			logger.String("index", idxCreatedByName),
+			logger.ErrorField(err))
+	}
+
+	// 2. __last_modified_time DESC 索引（用于按修改时间排序查询）
+	idxModifiedTimeName := fmt.Sprintf("%s_%s_modified_time", schemaName, tableName)
+	createModifiedTimeIndexSQL := fmt.Sprintf(
+		"CREATE INDEX IF NOT EXISTS %s ON %s (__last_modified_time DESC)",
+		p.quoteIdentifier(idxModifiedTimeName),
+		fullTableName,
+	)
+	if err := p.db.WithContext(ctx).Exec(createModifiedTimeIndexSQL).Error; err != nil {
+		logger.Warn("创建 __last_modified_time 索引失败或已存在",
+			logger.String("index", idxModifiedTimeName),
+			logger.ErrorField(err))
+	}
+
 	return nil
 }
 
@@ -341,4 +368,44 @@ func (p *PostgresProvider) quoteIdentifier(identifier string) string {
 	// PostgreSQL使用双引号
 	cleaned := strings.ReplaceAll(identifier, `"`, `""`)
 	return fmt.Sprintf(`"%s"`, cleaned)
+}
+
+// validateIdentifier 验证标识符（表名、字段名等）是否符合安全规范
+// ✅ 安全优化：防止 SQL 注入，只允许字母、数字、下划线、连字符
+func (p *PostgresProvider) validateIdentifier(identifier string) error {
+	if identifier == "" {
+		return fmt.Errorf("标识符不能为空")
+	}
+
+	// 只允许字母、数字、下划线、连字符、点（用于 schema.table 格式）
+	// 使用正则表达式验证
+	matched := true
+	for _, r := range identifier {
+		if !((r >= 'a' && r <= 'z') || (r >= 'A' && r <= 'Z') || 
+			(r >= '0' && r <= '9') || r == '_' || r == '-' || r == '.') {
+			matched = false
+			break
+		}
+	}
+
+	if !matched {
+		return fmt.Errorf("标识符包含非法字符: %s (只允许字母、数字、下划线、连字符和点)", identifier)
+	}
+
+	// 检查长度（防止过长的标识符）
+	if len(identifier) > 128 {
+		return fmt.Errorf("标识符过长: %s (最大长度128)", identifier)
+	}
+
+	return nil
+}
+
+// ValidateTableName 验证表名（公开方法）
+func (p *PostgresProvider) ValidateTableName(tableName string) error {
+	return p.validateIdentifier(tableName)
+}
+
+// ValidateFieldName 验证字段名（公开方法）
+func (p *PostgresProvider) ValidateFieldName(fieldName string) error {
+	return p.validateIdentifier(fieldName)
 }

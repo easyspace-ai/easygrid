@@ -314,6 +314,7 @@ func (s *LinkIntegrityService) Fix(
 	}
 
 	// 修复不一致的链接
+	// ✅ 优化：确保所有关系类型都能正确修复，添加详细的错误处理和日志
 	// 1. 从外键表获取正确的链接值
 	// 2. 更新 JSON 列中的 link 值
 	// 3. 删除无效的链接
@@ -321,15 +322,19 @@ func (s *LinkIntegrityService) Fix(
 	logger.Info("开始修复链接完整性问题",
 		logger.String("field_id", fieldID),
 		logger.String("table_id", tableID),
+		logger.String("relationship", linkOptions.Relationship),
 		logger.Int("inconsistent_count", len(inconsistentRecords)))
 
 	fixedCount := 0
+	failedCount := 0
 	for _, recordID := range inconsistentRecords {
 		if err := s.fixLinkForRecord(ctx, tableID, recordID, field, linkOptions); err != nil {
 			logger.Error("修复记录链接失败",
 				logger.String("record_id", recordID),
 				logger.String("field_id", fieldID),
+				logger.String("relationship", linkOptions.Relationship),
 				logger.ErrorField(err))
+			failedCount++
 			continue
 		}
 		fixedCount++
@@ -337,13 +342,16 @@ func (s *LinkIntegrityService) Fix(
 
 	logger.Info("✅ 链接完整性修复完成",
 		logger.String("field_id", fieldID),
+		logger.String("table_id", tableID),
+		logger.String("relationship", linkOptions.Relationship),
 		logger.Int("total_count", len(inconsistentRecords)),
-		logger.Int("fixed_count", fixedCount))
+		logger.Int("fixed_count", fixedCount),
+		logger.Int("failed_count", failedCount))
 
 	return &IntegrityIssue{
 		Type:    "InvalidLinkReference",
 		FieldID: fieldID,
-		Message: fmt.Sprintf("修复了 %d 个不一致的链接", fixedCount),
+		Message: fmt.Sprintf("修复了 %d 个不一致的链接（共 %d 个，失败 %d 个）", fixedCount, len(inconsistentRecords), failedCount),
 	}, nil
 }
 
@@ -390,15 +398,26 @@ func (s *LinkIntegrityService) getCorrectLinkValue(
 	foreignKeyName := linkOptions.ForeignKeyName
 
 	// 根据关系类型获取正确的链接值
+	// ✅ 优化：确保所有关系类型都正确处理，添加详细的错误处理
 	switch relationship {
 	case "manyMany":
 		// 从 junction table 获取
+		if fkHostTableName == "" || selfKeyName == "" || foreignKeyName == "" {
+			return nil, fmt.Errorf("manyMany 关系缺少必要的配置: fkHostTableName=%s, selfKeyName=%s, foreignKeyName=%s",
+				fkHostTableName, selfKeyName, foreignKeyName)
+		}
 		return s.getLinkValueFromJunctionTable(ctx, fkHostTableName, selfKeyName, foreignKeyName, recordID)
 	case "manyOne", "oneOne":
 		// 从当前表的外键列获取
+		if foreignKeyName == "" {
+			return nil, fmt.Errorf("%s 关系缺少外键列名", relationship)
+		}
 		return s.getLinkValueFromForeignKeyColumn(ctx, tableID, foreignKeyName, recordID, foreignTableID, linkOptions)
 	case "oneMany":
 		// 从关联表的外键列获取
+		if selfKeyName == "" {
+			return nil, fmt.Errorf("oneMany 关系缺少外键列名")
+		}
 		return s.getLinkValueFromForeignKeyColumn(ctx, foreignTableID, selfKeyName, recordID, foreignTableID, linkOptions)
 	default:
 		return nil, fmt.Errorf("不支持的关系类型: %s", relationship)

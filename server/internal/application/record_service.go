@@ -7,6 +7,7 @@ import (
 
 	"github.com/easyspace-ai/luckdb/server/internal/application/dto"
 	"github.com/easyspace-ai/luckdb/server/internal/domain/fields/repository"
+	fieldValueObject "github.com/easyspace-ai/luckdb/server/internal/domain/fields/valueobject"
 	"github.com/easyspace-ai/luckdb/server/internal/domain/record/entity"
 	recordRepo "github.com/easyspace-ai/luckdb/server/internal/domain/record/repository"
 	"github.com/easyspace-ai/luckdb/server/internal/domain/record/valueobject"
@@ -1009,14 +1010,23 @@ func (s *RecordService) DeleteRecord(ctx context.Context, tableID, recordID stri
 			return pkgerrors.ErrNotFound.WithDetails("记录不存在")
 		}
 
-		// 2. 删除记录（使用 tableID）
+		// 2. ✅ 清理 Link 字段引用（在删除记录前）
+		if err := s.cleanupLinkReferences(txCtx, tableID, recordID); err != nil {
+			logger.Warn("清理 Link 字段引用失败（不影响记录删除）",
+				logger.String("table_id", tableID),
+				logger.String("record_id", recordID),
+				logger.ErrorField(err))
+			// 注意：清理失败不影响记录删除，只记录警告
+		}
+
+		// 3. 删除记录（使用 tableID）
 		if err := s.recordRepo.DeleteByTableAndID(txCtx, tableID, id); err != nil {
 			return pkgerrors.ErrDatabaseOperation.WithDetails(fmt.Sprintf("删除记录失败: %v", err))
 		}
 
 		logger.Info("记录删除成功（事务中）", logger.String("record_id", recordID))
 
-		// 3. ✅ 收集事件（不立即发送）
+		// 4. ✅ 收集事件（不立即发送）
 		event := &database.RecordEvent{
 			EventType: "record.delete",
 			TID:       tableID,
@@ -1025,7 +1035,7 @@ func (s *RecordService) DeleteRecord(ctx context.Context, tableID, recordID stri
 		}
 		database.AddEventToTx(txCtx, event)
 
-		// 4. ✨ 添加事务提交后回调（发布 WebSocket 事件）
+		// 5. ✨ 添加事务提交后回调（发布 WebSocket 事件）
 		database.AddTxCallback(txCtx, func() {
 			s.publishRecordEvent(event)
 		})
@@ -1039,6 +1049,126 @@ func (s *RecordService) DeleteRecord(ctx context.Context, tableID, recordID stri
 
 	logger.Info("记录删除完成，事件将在事务提交后发布",
 		logger.String("record_id", recordID))
+
+	return nil
+}
+
+// cleanupLinkReferences 清理 Link 字段引用
+// 当删除记录时，需要从所有引用该记录的 Link 字段中移除该记录的引用
+func (s *RecordService) cleanupLinkReferences(ctx context.Context, tableID, recordID string) error {
+	// 1. 查找所有指向该表的 Link 字段
+	linkFields, err := s.fieldRepo.FindLinkFieldsToTable(ctx, tableID)
+	if err != nil {
+		return fmt.Errorf("查找 Link 字段失败: %w", err)
+	}
+
+	if len(linkFields) == 0 {
+		return nil // 没有 Link 字段引用该表
+	}
+
+	logger.Info("开始清理 Link 字段引用",
+		logger.String("table_id", tableID),
+		logger.String("record_id", recordID),
+		logger.Int("link_field_count", len(linkFields)))
+
+	// 2. 对每个 Link 字段，查找包含该记录引用的所有记录
+	for _, linkField := range linkFields {
+		linkTableID := linkField.TableID()
+		
+		// 查找包含该记录引用的所有记录
+		referencingRecordIDs, err := s.recordRepo.(*infraRepository.RecordRepositoryDynamic).FindRecordsByLinkValue(
+			ctx, linkTableID, linkField.ID().String(), []string{recordID})
+		if err != nil {
+			logger.Warn("查找引用记录失败",
+				logger.String("link_field_id", linkField.ID().String()),
+				logger.String("link_table_id", linkTableID),
+				logger.ErrorField(err))
+			continue
+		}
+
+		if len(referencingRecordIDs) == 0 {
+			continue // 没有记录引用该记录
+		}
+
+		// 3. 从这些记录的 Link 字段中移除该记录的引用
+		// 使用 jsonb_set 或 jsonb 操作符来更新 JSONB 字段
+		for _, refRecordID := range referencingRecordIDs {
+			if err := s.removeLinkReference(ctx, linkTableID, refRecordID, linkField.ID().String(), recordID); err != nil {
+				logger.Warn("移除 Link 引用失败",
+					logger.String("link_field_id", linkField.ID().String()),
+					logger.String("link_table_id", linkTableID),
+					logger.String("ref_record_id", refRecordID),
+					logger.String("record_id", recordID),
+					logger.ErrorField(err))
+				// 继续处理其他记录，不中断
+			}
+		}
+	}
+
+	logger.Info("Link 字段引用清理完成",
+		logger.String("table_id", tableID),
+		logger.String("record_id", recordID))
+
+	return nil
+}
+
+// removeLinkReference 从 Link 字段中移除指定记录的引用
+func (s *RecordService) removeLinkReference(ctx context.Context, tableID, recordID, fieldID, linkedRecordID string) error {
+	// 获取表信息
+	table, err := s.tableRepo.GetByID(ctx, tableID)
+	if err != nil {
+		return fmt.Errorf("获取表信息失败: %w", err)
+	}
+	if table == nil {
+		return fmt.Errorf("表不存在: %s", tableID)
+	}
+
+	// 获取字段信息
+	fieldIDVO := fieldValueObject.NewFieldID(fieldID)
+	field, err := s.fieldRepo.FindByID(ctx, fieldIDVO)
+	if err != nil {
+		return fmt.Errorf("获取字段信息失败: %w", err)
+	}
+	if field == nil {
+		return fmt.Errorf("字段不存在: %s", fieldID)
+	}
+
+	dbFieldName := field.DBFieldName().String()
+	if dbFieldName == "" {
+		return fmt.Errorf("字段的 DBFieldName 为空: %s", fieldID)
+	}
+
+	baseID := table.BaseID()
+	fullTableName := fmt.Sprintf("%s.%s", baseID, tableID)
+
+	// 使用 PostgreSQL 的 jsonb_set 函数移除引用
+	// 对于数组格式：[{"id": "rec_xxx"}, ...] -> 移除包含该 id 的元素
+	// 对于单个对象格式：{"id": "rec_xxx"} -> 设置为 NULL
+	updateSQL := fmt.Sprintf(`
+		UPDATE %s
+		SET %s = CASE
+			WHEN jsonb_typeof(%s) = 'array' THEN
+				(SELECT jsonb_agg(elem) FROM jsonb_array_elements(%s) AS elem WHERE elem->>'id' != $1)
+			WHEN %s->>'id' = $1 THEN NULL
+			ELSE %s
+		END,
+		__last_modified_time = CURRENT_TIMESTAMP,
+		__version = __version + 1
+		WHERE __id = $2
+	`, 
+		fmt.Sprintf(`"%s"`, fullTableName),
+		fmt.Sprintf(`"%s"`, dbFieldName),
+		fmt.Sprintf(`"%s"`, dbFieldName),
+		fmt.Sprintf(`"%s"`, dbFieldName),
+		fmt.Sprintf(`"%s"`, dbFieldName),
+		fmt.Sprintf(`"%s"`, dbFieldName),
+	)
+
+	// 执行更新
+	db := s.recordRepo.(*infraRepository.RecordRepositoryDynamic).GetDB()
+	if err := db.WithContext(ctx).Exec(updateSQL, linkedRecordID, recordID).Error; err != nil {
+		return fmt.Errorf("更新 Link 字段失败: %w", err)
+	}
 
 	return nil
 }

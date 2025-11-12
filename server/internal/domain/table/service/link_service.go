@@ -689,13 +689,44 @@ func (s *LinkService) saveForeignKeyForManyMany(
 		}
 	}
 
+	// ✅ 安全优化：验证表名和字段名（防止 SQL 注入）
+	if s.dbProvider != nil {
+		if validator, ok := s.dbProvider.(interface {
+			ValidateTableName(tableName string) error
+			ValidateFieldName(fieldName string) error
+		}); ok {
+			// 验证表名（提取 schema 和 table）
+			parts := strings.Split(fullJunctionTableName, ".")
+			if len(parts) == 2 {
+				if err := validator.ValidateTableName(parts[0]); err != nil {
+					return fmt.Errorf("表名验证失败: %w", err)
+				}
+				if err := validator.ValidateTableName(parts[1]); err != nil {
+					return fmt.Errorf("表名验证失败: %w", err)
+				}
+			} else {
+				if err := validator.ValidateTableName(fullJunctionTableName); err != nil {
+					return fmt.Errorf("表名验证失败: %w", err)
+				}
+			}
+			// 验证字段名
+			if err := validator.ValidateFieldName(options.SelfKeyName); err != nil {
+				return fmt.Errorf("字段名验证失败: %w", err)
+			}
+			if err := validator.ValidateFieldName(options.ForeignKeyName); err != nil {
+				return fmt.Errorf("字段名验证失败: %w", err)
+			}
+		}
+	}
+
 	// 执行删除
 	if len(toDelete) > 0 {
-		// 使用 GORM 的批量删除
+		// ✅ 安全优化：使用 GORM 的参数化查询代替字符串拼接
+		// 虽然表名和字段名无法参数化，但我们已经验证了它们的安全性
 		for _, pair := range toDelete {
 			deleteSQL := fmt.Sprintf(`
 				DELETE FROM %s 
-				WHERE %s = ? AND %s = ?
+				WHERE %s = $1 AND %s = $2
 			`, s.quoteIdentifier(fullJunctionTableName),
 				s.quoteIdentifier(options.SelfKeyName),
 				s.quoteIdentifier(options.ForeignKeyName))
@@ -709,10 +740,11 @@ func (s *LinkService) saveForeignKeyForManyMany(
 
 	// 执行添加
 	if len(toAdd) > 0 {
-		// 使用 GORM 的批量插入
+		// ✅ 安全优化：使用 GORM 的参数化查询代替字符串拼接
+		// 虽然表名和字段名无法参数化，但我们已经验证了它们的安全性
 		for _, pair := range toAdd {
 			insertSQL := fmt.Sprintf(`
-				INSERT INTO %s (%s, %s) VALUES (?, ?)
+				INSERT INTO %s (%s, %s) VALUES ($1, $2)
 			`, s.quoteIdentifier(fullJunctionTableName),
 				s.quoteIdentifier(options.SelfKeyName),
 				s.quoteIdentifier(options.ForeignKeyName))
@@ -1002,6 +1034,7 @@ func (s *LinkService) updateSymmetricFields(
 		}
 
 		// 根据关系类型更新对称字段
+		// ✅ 优化：确保所有关系类型都正确处理，添加错误处理
 		for recordID, fkItem := range fkMap {
 			// 根据关系类型调用不同的更新方法
 			var changes []CellChange
@@ -1014,16 +1047,33 @@ func (s *LinkService) updateSymmetricFields(
 				changes = s.updateForeignCellForOneMany(ctx, fkItem, recordID, symmetricFieldID, foreignTableID, field)
 			case "oneOne":
 				changes = s.updateForeignCellForOneOne(ctx, fkItem, recordID, symmetricFieldID, foreignTableID, field)
+			default:
+				logger.Warn("未知的关系类型，跳过对称字段更新",
+					logger.String("relationship", relationship),
+					logger.String("field_id", fieldID),
+					logger.String("record_id", recordID))
+				continue
 			}
 			cellChanges = append(cellChanges, changes...)
 		}
 	}
 
 	// ✨ 实际应用对称字段的更新
+	// ✅ 优化：确保批量更新成功，添加详细的错误日志
 	if len(cellChanges) > 0 {
+		logger.Info("准备应用对称字段更新",
+			logger.Int("change_count", len(cellChanges)),
+			logger.String("table_id", tableID))
 		if err := s.applySymmetricFieldUpdates(ctx, cellChanges); err != nil {
+			logger.Error("应用对称字段更新失败",
+				logger.String("table_id", tableID),
+				logger.Int("change_count", len(cellChanges)),
+				logger.ErrorField(err))
 			return nil, fmt.Errorf("应用对称字段更新失败: %w", err)
 		}
+		logger.Info("✅ 对称字段更新应用成功",
+			logger.String("table_id", tableID),
+			logger.Int("change_count", len(cellChanges)))
 	}
 
 	return cellChanges, nil
@@ -1320,8 +1370,16 @@ func (s *LinkService) applySymmetricFieldUpdates(ctx context.Context, cellChange
 	}
 
 	// 批量更新每个表的对称字段
+	// ✅ 优化：确保批量更新成功，添加详细的错误处理和日志
 	for tableID, updates := range updatesByTable {
+		logger.Debug("批量更新对称字段",
+			logger.String("table_id", tableID),
+			logger.Int("update_count", len(updates)))
 		if err := s.recordRepo.BatchUpdateFields(ctx, tableID, updates); err != nil {
+			logger.Error("批量更新对称字段失败",
+				logger.String("table_id", tableID),
+				logger.Int("update_count", len(updates)),
+				logger.ErrorField(err))
 			return fmt.Errorf("批量更新对称字段失败 (table: %s): %w", tableID, err)
 		}
 		logger.Info("✅ 对称字段批量更新成功",

@@ -18,9 +18,10 @@ database:
   password: 'luckdb'
   name: 'luckdb_dev'
   ssl_mode: 'disable'
-  max_idle_conns: 25 # ✅ 优化：10 -> 25
-  max_open_conns: 200 # ✅ 优化：100 -> 200
-  conn_max_lifetime: '1h'
+  max_idle_conns: 50        # ✅ 优化：增加空闲连接数（25 -> 50）
+  max_open_conns: 300       # ✅ 优化：增加最大连接数（200 -> 300）
+  conn_max_lifetime: '2h'    # ✅ 优化：增加连接生命周期（1h -> 2h）
+  conn_max_idle_time: '30m' # ✅ 优化：添加空闲连接超时（30分钟）
   log_level: 'info' # 开启所有SQL日志，包括查询表的字段列表
 
 redis:

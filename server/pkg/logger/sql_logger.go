@@ -5,6 +5,7 @@ import (
 	"io"
 	"os"
 	"path/filepath"
+	"strings"
 	"sync"
 	"time"
 
@@ -75,6 +76,63 @@ func InitSQLLogger(config SQLLoggerConfig) error {
 	return err
 }
 
+// sanitizeSQLArgs 脱敏 SQL 参数（防止敏感信息泄露）
+// ✅ 安全优化：过滤密码、token 等敏感字段
+func sanitizeSQLArgs(args []interface{}) []interface{} {
+	if len(args) == 0 {
+		return args
+	}
+
+	sanitized := make([]interface{}, len(args))
+	sensitiveKeys := []string{"password", "token", "secret", "api_key", "authorization", "auth", "credential"}
+
+	for i, arg := range args {
+		// 检查参数是否为字符串类型
+		if str, ok := arg.(string); ok {
+			// 检查是否包含敏感关键字（不区分大小写）
+			lowerStr := strings.ToLower(str)
+			isSensitive := false
+			for _, key := range sensitiveKeys {
+				if strings.Contains(lowerStr, key) {
+					isSensitive = true
+					break
+				}
+			}
+			if isSensitive {
+				sanitized[i] = "***"
+			} else {
+				sanitized[i] = arg
+			}
+		} else {
+			sanitized[i] = arg
+		}
+	}
+
+	return sanitized
+}
+
+// sanitizeSQL 脱敏 SQL 语句（防止敏感信息泄露）
+// ✅ 安全优化：过滤 SQL 中的敏感信息
+func sanitizeSQL(sql string) string {
+	// 检查 SQL 中是否包含敏感关键字
+	sensitivePatterns := []string{
+		"password", "token", "secret", "api_key", "authorization",
+		"auth", "credential", "pwd", "passwd",
+	}
+
+	lowerSQL := strings.ToLower(sql)
+	for _, pattern := range sensitivePatterns {
+		if strings.Contains(lowerSQL, pattern) {
+			// 如果包含敏感关键字，替换相关值
+			// 这里使用简单的替换策略，实际应用中可能需要更复杂的处理
+			// 注意：这里只替换值部分，不替换字段名
+			sql = strings.ReplaceAll(sql, pattern, "***")
+		}
+	}
+
+	return sql
+}
+
 // LogSQL 记录SQL查询
 func (l *SQLFileLogger) LogSQL(sql string, args []interface{}, duration time.Duration, rows int64, err error) {
 	if l == nil || l.writer == nil {
@@ -86,14 +144,18 @@ func (l *SQLFileLogger) LogSQL(sql string, args []interface{}, duration time.Dur
 
 	timestamp := time.Now().Format("2006-01-02 15:04:05.000")
 
+	// ✅ 安全优化：脱敏 SQL 和参数
+	sanitizedSQL := sanitizeSQL(sql)
+	sanitizedArgs := sanitizeSQLArgs(args)
+
 	// 构建日志内容
 	var logContent string
 
 	if err != nil {
 		logContent = fmt.Sprintf("[%s] ❌ SQL执行失败 (耗时: %v)\n", timestamp, duration)
-		logContent += fmt.Sprintf("SQL: %s\n", sql)
-		if len(args) > 0 {
-			logContent += fmt.Sprintf("参数: %v\n", args)
+		logContent += fmt.Sprintf("SQL: %s\n", sanitizedSQL)
+		if len(sanitizedArgs) > 0 {
+			logContent += fmt.Sprintf("参数: %v\n", sanitizedArgs)
 		}
 		logContent += fmt.Sprintf("错误: %v\n", err)
 	} else {
@@ -102,9 +164,9 @@ func (l *SQLFileLogger) LogSQL(sql string, args []interface{}, duration time.Dur
 			icon = "🐌" // 慢查询
 		}
 		logContent = fmt.Sprintf("[%s] %s SQL执行成功 (耗时: %v, 影响行数: %d)\n", timestamp, icon, duration, rows)
-		logContent += fmt.Sprintf("%s\n", sql)
-		if len(args) > 0 {
-			logContent += fmt.Sprintf("-- 参数: %v\n", args)
+		logContent += fmt.Sprintf("%s\n", sanitizedSQL)
+		if len(sanitizedArgs) > 0 {
+			logContent += fmt.Sprintf("-- 参数: %v\n", sanitizedArgs)
 		}
 	}
 

@@ -163,6 +163,8 @@ func (b *DependencyGraphBuilder) extractRollupDependencies(field *entity.Field, 
 }
 
 // extractCountDependencies 提取Count字段的依赖
+// ✅ 优化：确保 Count 字段依赖正确提取
+// 依赖方向：FromFieldID = Count 字段（依赖字段），ToFieldID = Link 字段（被依赖字段）
 func (b *DependencyGraphBuilder) extractCountDependencies(field *entity.Field, options *valueobject.FieldOptions) []GraphItem {
 	var edges []GraphItem
 
@@ -170,8 +172,8 @@ func (b *DependencyGraphBuilder) extractCountDependencies(field *entity.Field, o
 	if options != nil && options.Count != nil {
 		if options.Count.LinkFieldID != "" {
 			edges = append(edges, GraphItem{
-				FromFieldID: field.ID().String(),
-				ToFieldID:   options.Count.LinkFieldID,
+				FromFieldID: field.ID().String(),        // Count 字段（依赖字段）
+				ToFieldID:   options.Count.LinkFieldID, // Link 字段（被依赖字段）
 			})
 		}
 	}

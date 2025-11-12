@@ -197,6 +197,14 @@ func (c *LinkFieldSchemaCreator) createManyManyJunctionTablePostgres(
 		logger.Warn("创建索引失败", logger.ErrorField(err))
 	}
 
+	// ✅ 优化：创建复合索引（用于同时查询 self_key 和 foreign_key）
+	idxCompositeName := fmt.Sprintf("idx_%s_composite", junctionTableName)
+	idxCompositeSQL := fmt.Sprintf("CREATE INDEX IF NOT EXISTS %s ON %s (%s, %s)",
+		c.quoteIdentifier(idxCompositeName), quotedJunctionTable, quotedSelfKeyName, quotedForeignKeyName)
+	if err := c.executeSQL(ctx, idxCompositeSQL); err != nil {
+		logger.Warn("创建复合索引失败", logger.ErrorField(err))
+	}
+
 	return nil
 }
 
@@ -256,6 +264,14 @@ func (c *LinkFieldSchemaCreator) createManyManyJunctionTableSQLite(
 		c.quoteIdentifier(idxForeignName), quotedJunctionTable, quotedForeignKeyName)
 	if err := c.executeSQL(ctx, idxForeignSQL); err != nil {
 		logger.Warn("创建索引失败", logger.ErrorField(err))
+	}
+
+	// ✅ 优化：创建复合索引（用于同时查询 self_key 和 foreign_key）
+	idxCompositeName := fmt.Sprintf("idx_%s_composite", junctionTableName)
+	idxCompositeSQL := fmt.Sprintf("CREATE INDEX IF NOT EXISTS %s ON %s (%s, %s)",
+		c.quoteIdentifier(idxCompositeName), quotedJunctionTable, quotedSelfKeyName, quotedForeignKeyName)
+	if err := c.executeSQL(ctx, idxCompositeSQL); err != nil {
+		logger.Warn("创建复合索引失败", logger.ErrorField(err))
 	}
 
 	return nil

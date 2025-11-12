@@ -400,7 +400,7 @@ func (qo *QueryOptimizer) InvalidateCache(ctx context.Context, pattern string) e
 }
 
 // GetQueryStats 获取查询统计信息
-func (qo *QueryOptimizer) GetQueryStats(ctx context.Context) (*QueryStats, error) {
+func (qo *QueryOptimizer) GetQueryStats(ctx context.Context) (*OptimizerQueryStats, error) {
 	// 查询慢查询日志
 	var slowQueries []SlowQuery
 	err := qo.db.WithContext(ctx).Raw(`
@@ -413,20 +413,20 @@ func (qo *QueryOptimizer) GetQueryStats(ctx context.Context) (*QueryStats, error
 
 	if err != nil {
 		// 如果pg_stat_statements扩展未启用，返回空统计
-		return &QueryStats{
+		return &OptimizerQueryStats{
 			SlowQueries: []SlowQuery{},
 			GeneratedAt: time.Now(),
 		}, nil
 	}
 
-	return &QueryStats{
+	return &OptimizerQueryStats{
 		SlowQueries: slowQueries,
 		GeneratedAt: time.Now(),
 	}, nil
 }
 
-// QueryStats 查询统计信息
-type QueryStats struct {
+// OptimizerQueryStats 查询优化器统计信息（避免与 QueryMonitor 的 QueryStats 冲突）
+type OptimizerQueryStats struct {
 	SlowQueries []SlowQuery `json:"slow_queries"`
 	GeneratedAt time.Time   `json:"generated_at"`
 }

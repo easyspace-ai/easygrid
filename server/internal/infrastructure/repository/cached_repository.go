@@ -3,6 +3,8 @@ package repository
 import (
 	"context"
 	"fmt"
+	"sort"
+	"strings"
 	"time"
 
 	"gorm.io/gorm"
@@ -740,8 +742,48 @@ func (r *CachedRecordRepository) Exists(ctx context.Context, id recordValueobjec
 	return r.repo.Exists(ctx, id)
 }
 
+// FindByIDs 根据ID列表查询记录（带缓存）
+// ✅ 优化：实现批量查询缓存，减少数据库查询
 func (r *CachedRecordRepository) FindByIDs(ctx context.Context, tableID string, ids []recordValueobject.RecordID) ([]*recordEntity.Record, error) {
-	return r.repo.FindByIDs(ctx, tableID, ids)
+	if len(ids) == 0 {
+		return []*recordEntity.Record{}, nil
+	}
+
+	// 构建缓存键（使用排序后的ID列表确保一致性）
+	idStrings := make([]string, len(ids))
+	for i, id := range ids {
+		idStrings[i] = id.String()
+	}
+	// 排序以确保缓存键的一致性
+	sort.Strings(idStrings)
+	cacheKey := fmt.Sprintf("record:ids:%s:%s", tableID, strings.Join(idStrings, ","))
+
+	// 尝试从缓存获取
+	var records []*recordEntity.Record
+	if err := r.cacheService.Get(ctx, cacheKey, &records); err == nil {
+		if records != nil && len(records) > 0 {
+			logger.Debug("✅ FindByIDs 缓存命中",
+				logger.String("table_id", tableID),
+				logger.Int("record_count", len(records)))
+			return records, nil
+		}
+	}
+
+	// 缓存未命中，查询数据库
+	records, err := r.repo.FindByIDs(ctx, tableID, ids)
+	if err != nil {
+		return nil, err
+	}
+
+	// 写入缓存（TTL: 5分钟）
+	if err := r.cacheService.Set(ctx, cacheKey, records, r.ttl); err != nil {
+		logger.Warn("写入缓存失败",
+			logger.String("table_id", tableID),
+			logger.String("cache_key", cacheKey),
+			logger.ErrorField(err))
+	}
+
+	return records, nil
 }
 
 func (r *CachedRecordRepository) FindByTableID(ctx context.Context, tableID string) ([]*recordEntity.Record, error) {

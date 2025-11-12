@@ -860,6 +860,70 @@ func (s *CalculationService) getCachedDependencyGraph(ctx context.Context, table
 	return graph
 }
 
+// CalculateBatch 批量计算多个记录的虚拟字段
+// ✅ 优化：一次性获取所有字段和依赖图，按依赖顺序批量计算
+func (s *CalculationService) CalculateBatch(ctx context.Context, records []*entity.Record, tableID string) error {
+	if len(records) == 0 {
+		return nil
+	}
+
+	// 1. 一次性获取所有字段
+	fields, err := s.fieldRepo.FindByTableID(ctx, tableID)
+	if err != nil {
+		return errors.ErrDatabaseQuery.WithDetails(err.Error())
+	}
+
+	// 2. 获取缓存的依赖图
+	depGraph := s.getCachedDependencyGraph(ctx, tableID, fields)
+
+	// 3. 检查循环依赖
+	if dependency.HasCycle(depGraph) {
+		return errors.ErrValidationFailed.WithDetails("circular dependency detected in fields")
+	}
+
+	// 4. 拓扑排序
+	sortedFields, _ := dependency.GetTopoOrders(depGraph)
+
+	// 5. 过滤虚拟字段
+	virtualFields := s.filterVirtualFields(fields)
+
+	// 6. 按依赖顺序批量计算所有记录
+	for _, item := range sortedFields {
+		field := s.getFieldByID(virtualFields, item.ID)
+		if field == nil {
+			continue
+		}
+
+		// 批量计算该字段的所有记录
+		for _, record := range records {
+			recordData := record.Data().ToMap()
+			value, calcErr := s.calculateField(ctx, record, field, recordData)
+			if calcErr != nil {
+				logger.Warn("批量计算字段失败",
+					logger.String("field_id", field.ID().String()),
+					logger.String("record_id", record.ID().String()),
+					logger.ErrorField(calcErr))
+				recordData[field.ID().String()] = nil
+			} else {
+				recordData[field.ID().String()] = value
+			}
+
+			// 更新记录数据
+			newData, err := valueobject.NewRecordData(recordData)
+			if err == nil {
+				record.Update(newData, record.UpdatedBy())
+			}
+		}
+	}
+
+	logger.Info("批量计算完成",
+		logger.String("table_id", tableID),
+		logger.Int("record_count", len(records)),
+		logger.Int("virtual_field_count", len(virtualFields)))
+
+	return nil
+}
+
 // calculateFieldVersion 计算字段版本号（基于字段的更新时间）
 func (s *CalculationService) calculateFieldVersion(fields []*fieldEntity.Field) int64 {
 	var maxTimestamp int64

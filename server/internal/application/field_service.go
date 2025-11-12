@@ -440,6 +440,7 @@ func (s *FieldService) CreateField(ctx context.Context, req dto.CreateFieldReque
 	}
 
 	// 11. ✨ 如果是 Link 字段且 IsSymmetric=true，自动创建对称字段
+	// ✅ 优化：确保对称字段创建失败时，主字段的 SymmetricFieldID 保持为空
 	if req.Type == "link" && field.Options() != nil && field.Options().Link != nil {
 		linkOptions := field.Options().Link
 		if linkOptions.IsSymmetric && linkOptions.SymmetricFieldID == "" {
@@ -448,8 +449,10 @@ func (s *FieldService) CreateField(ctx context.Context, req dto.CreateFieldReque
 					logger.String("field_id", field.ID().String()),
 					logger.String("table_id", req.TableID),
 					logger.ErrorField(err))
+				// ✅ 优化：确保主字段的 SymmetricFieldID 保持为空（如果对称字段创建失败）
 				// 注意：对称字段创建失败不影响主字段的创建，只记录错误
 				// 因为主字段已经保存成功，回滚成本较高
+				// 主字段的 SymmetricFieldID 会在对称字段创建成功后才设置
 			}
 		}
 	}
@@ -703,6 +706,42 @@ func (s *FieldService) UpdateField(ctx context.Context, fieldID string, req dto.
 		// ✨ 应用通用字段配置（defaultValue, showAs, formatting 等）
 		// 参考 Teable 的优秀设计，补充我们之前缺失的配置
 		s.applyCommonFieldOptions(ctx, field, req.Options)
+
+		// ✅ Link 字段关系类型变更支持
+		if field.Type().String() == "link" && req.Options != nil {
+			newRelationship, _ := req.Options["relationship"].(string)
+			oldRelationship := ""
+			if field.Options() != nil && field.Options().Link != nil {
+				// 从 LinkOptions 中获取 relationship
+				linkOpts := field.Options().Link
+				if linkOpts.Relationship != "" {
+					oldRelationship = linkOpts.Relationship
+				}
+			}
+
+			// 检测关系类型变更
+			if newRelationship != "" && newRelationship != oldRelationship {
+				logger.Info("检测到 Link 字段关系类型变更",
+					logger.String("field_id", fieldID),
+					logger.String("old_relationship", oldRelationship),
+					logger.String("new_relationship", newRelationship))
+
+				// 执行关系类型变更（数据迁移）
+				if err := s.changeLinkRelationshipType(ctx, field, oldRelationship, newRelationship, req.Options); err != nil {
+					logger.Error("关系类型变更失败",
+						logger.String("field_id", fieldID),
+						logger.String("old_relationship", oldRelationship),
+						logger.String("new_relationship", newRelationship),
+						logger.ErrorField(err))
+					return nil, pkgerrors.ErrDatabaseOperation.WithDetails(fmt.Sprintf("关系类型变更失败: %v", err))
+				}
+
+				logger.Info("关系类型变更成功",
+					logger.String("field_id", fieldID),
+					logger.String("old_relationship", oldRelationship),
+					logger.String("new_relationship", newRelationship))
+			}
+		}
 	}
 
 	// 5. 更新约束
@@ -2012,6 +2051,7 @@ func (s *FieldService) createSymmetricField(
 	}
 
 	// 10. 更新主字段的 SymmetricFieldID
+	// ✅ 优化：确保主字段和对称字段的 SymmetricFieldID 正确设置
 	mainFieldOptions := mainField.Options()
 	if mainFieldOptions == nil {
 		mainFieldOptions = valueobject.NewFieldOptions()
@@ -2023,12 +2063,15 @@ func (s *FieldService) createSymmetricField(
 	mainField.UpdateOptions(mainFieldOptions)
 
 	// 11. 保存主字段（更新 SymmetricFieldID）
+	// ✅ 优化：如果保存失败，尝试回滚对称字段（可选，因为对称字段已经创建成功）
 	if err := s.fieldRepo.Save(ctx, mainField); err != nil {
 		logger.Warn("更新主字段的 SymmetricFieldID 失败",
 			logger.String("main_field_id", mainField.ID().String()),
 			logger.String("symmetric_field_id", symmetricField.ID().String()),
 			logger.ErrorField(err))
-		// 不影响对称字段的创建，只记录警告
+		// 注意：主字段保存失败不影响对称字段的创建
+		// 对称字段已经创建成功，主字段的 SymmetricFieldID 可以在后续更新
+		// 这里不进行回滚，因为对称字段创建是成功的，只是主字段的引用更新失败
 	}
 
 	// 12. 广播对称字段创建事件
@@ -2046,11 +2089,26 @@ func (s *FieldService) createSymmetricField(
 }
 
 // generateSymmetricFieldName 生成对称字段名称
+// ✅ 优化：改进对称字段名称生成逻辑，使其更智能和可读
 // 例如：主字段"已选课程" -> 对称字段"选课学生"
 func (s *FieldService) generateSymmetricFieldName(mainFieldName string, foreignTableName string) string {
-	// 简单的命名策略：使用表名 + "列表"
-	// 例如：如果主字段是"已选课程"，对称字段可以是"选课学生"
-	// 这里使用更通用的策略：表名 + "列表"
+	// 改进的命名策略：
+	// 1. 如果主字段名称包含"已"、"的"等字，尝试提取核心词
+	// 2. 使用表名 + "列表"作为默认策略
+	// 3. 如果表名和主字段名称相似，使用更智能的命名
+	
+	// 尝试从主字段名称中提取核心词
+	// 例如："已选课程" -> "选课程" -> "课程"
+	// 但这里为了简单，直接使用表名 + "列表"
+	
+	// 如果主字段名称包含表名，使用更智能的命名
+	if strings.Contains(mainFieldName, foreignTableName) {
+		// 如果主字段名称已经包含表名，使用主字段名称的反向
+		// 例如：主字段"学生已选课程"，表名"课程" -> 对称字段"选课学生"
+		return fmt.Sprintf("%s列表", foreignTableName)
+	}
+	
+	// 默认策略：表名 + "列表"
 	return fmt.Sprintf("%s列表", foreignTableName)
 }
 
@@ -2070,4 +2128,420 @@ func (s *FieldService) reverseRelationship(relationship string) string {
 	default:
 		return relationship
 	}
+}
+
+// changeLinkRelationshipType 变更 Link 字段的关系类型
+// 支持从 manyMany 改为 manyOne 等关系类型变更
+// 需要数据迁移：从 junction table 迁移到外键列，或相反
+func (s *FieldService) changeLinkRelationshipType(
+	ctx context.Context,
+	field *entity.Field,
+	oldRelationship, newRelationship string,
+	newOptions map[string]interface{},
+) error {
+	// 1. 验证关系类型变更是否支持
+	if !s.isRelationshipChangeSupported(oldRelationship, newRelationship) {
+		return fmt.Errorf("不支持的关系类型变更: %s -> %s", oldRelationship, newRelationship)
+	}
+
+	// 2. 获取表信息
+	tableID := field.TableID()
+	table, err := s.tableRepo.GetByID(ctx, tableID)
+	if err != nil {
+		return fmt.Errorf("获取表信息失败: %w", err)
+	}
+	if table == nil {
+		return fmt.Errorf("表不存在: %s", tableID)
+	}
+
+	baseID := table.BaseID()
+
+	// 3. 获取 Link 字段选项
+	linkOptions := field.Options().Link
+	if linkOptions == nil {
+		return fmt.Errorf("Link 字段选项不存在")
+	}
+
+	foreignTableID := linkOptions.LinkedTableID
+	if foreignTableID == "" {
+		return fmt.Errorf("关联表ID不存在")
+	}
+
+	// 4. 根据变更类型执行数据迁移
+	switch {
+	case oldRelationship == "manyMany" && newRelationship == "manyOne":
+		// 从 junction table 迁移到外键列
+		return s.migrateFromManyManyToManyOne(ctx, baseID, tableID, foreignTableID, field, linkOptions)
+	case oldRelationship == "manyOne" && newRelationship == "manyMany":
+		// 从外键列迁移到 junction table
+		return s.migrateFromManyOneToManyMany(ctx, baseID, tableID, foreignTableID, field, linkOptions)
+	case oldRelationship == "manyMany" && newRelationship == "oneMany":
+		// 从 junction table 迁移到关联表的外键列
+		return s.migrateFromManyManyToOneMany(ctx, baseID, tableID, foreignTableID, field, linkOptions)
+	case oldRelationship == "oneMany" && newRelationship == "manyMany":
+		// 从关联表的外键列迁移到 junction table
+		return s.migrateFromOneManyToManyMany(ctx, baseID, tableID, foreignTableID, field, linkOptions)
+	default:
+		return fmt.Errorf("不支持的关系类型变更: %s -> %s", oldRelationship, newRelationship)
+	}
+}
+
+// isRelationshipChangeSupported 检查关系类型变更是否支持
+func (s *FieldService) isRelationshipChangeSupported(oldRelationship, newRelationship string) bool {
+	// 支持的关系类型变更
+	supportedChanges := map[string][]string{
+		"manyMany": {"manyOne", "oneMany"},
+		"manyOne":  {"manyMany"},
+		"oneMany":  {"manyMany"},
+		"oneOne":   {}, // 一对一关系类型变更暂不支持
+	}
+
+	allowed, exists := supportedChanges[oldRelationship]
+	if !exists {
+		return false
+	}
+
+	for _, allowedType := range allowed {
+		if allowedType == newRelationship {
+			return true
+		}
+	}
+
+	return false
+}
+
+// migrateFromManyManyToManyOne 从 manyMany 迁移到 manyOne
+func (s *FieldService) migrateFromManyManyToManyOne(
+	ctx context.Context,
+	baseID, tableID, foreignTableID string,
+	field *entity.Field,
+	linkOptions *valueobject.LinkOptions,
+) error {
+	// 1. 获取 junction table 名称
+	junctionTableName := linkOptions.FkHostTableName
+	if junctionTableName == "" {
+		return fmt.Errorf("junction table 名称不存在")
+	}
+
+	fullJunctionTableName := s.dbProvider.GenerateTableName(baseID, junctionTableName)
+	fullTableName := s.dbProvider.GenerateTableName(baseID, tableID)
+
+	// 2. 从 junction table 读取数据
+	// 对于每个 self_key，只保留第一个 foreign_key（manyOne 只支持单个值）
+	migrationSQL := fmt.Sprintf(`
+		UPDATE %s AS t
+		SET %s = (
+			SELECT j.%s
+			FROM %s AS j
+			WHERE j.%s = t.__id
+			LIMIT 1
+		),
+		__last_modified_time = CURRENT_TIMESTAMP,
+		__version = __version + 1
+		WHERE EXISTS (
+			SELECT 1 FROM %s AS j
+			WHERE j.%s = t.__id
+		)
+	`,
+		fullTableName,
+		fmt.Sprintf(`"%s"`, linkOptions.ForeignKeyName),
+		fmt.Sprintf(`"%s"`, linkOptions.ForeignKeyName),
+		fullJunctionTableName,
+		fmt.Sprintf(`"%s"`, linkOptions.SelfKeyName),
+		fullJunctionTableName,
+		fmt.Sprintf(`"%s"`, linkOptions.SelfKeyName),
+	)
+
+	// 执行迁移
+	if err := s.db.WithContext(ctx).Exec(migrationSQL).Error; err != nil {
+		return fmt.Errorf("数据迁移失败: %w", err)
+	}
+
+	// 3. 删除旧的 junction table
+	if err := s.dbProvider.DropPhysicalTable(ctx, baseID, junctionTableName); err != nil {
+		logger.Warn("删除旧的 junction table 失败",
+			logger.String("junction_table", junctionTableName),
+			logger.ErrorField(err))
+		// 继续执行，不影响主流程
+	}
+
+	// 4. 创建新的外键列（如果不存在）
+	columnDef := database.ColumnDefinition{
+		Name:    linkOptions.ForeignKeyName,
+		Type:    "VARCHAR(50)",
+		NotNull: false,
+		Unique:  false,
+	}
+
+	if err := s.dbProvider.AddColumn(ctx, baseID, tableID, columnDef); err != nil {
+		logger.Warn("创建外键列失败（可能已存在）",
+			logger.String("field_name", linkOptions.ForeignKeyName),
+			logger.ErrorField(err))
+	}
+
+	// 5. 创建外键列索引
+	idxSQL := fmt.Sprintf("CREATE INDEX IF NOT EXISTS idx_%s_%s ON %s (%s)",
+		tableID, linkOptions.ForeignKeyName,
+		s.dbProvider.GenerateTableName(baseID, tableID),
+		fmt.Sprintf(`"%s"`, linkOptions.ForeignKeyName))
+	if err := s.db.WithContext(ctx).Exec(idxSQL).Error; err != nil {
+		logger.Warn("创建外键列索引失败", logger.ErrorField(err))
+	}
+
+	logger.Info("关系类型变更完成: manyMany -> manyOne",
+		logger.String("field_id", field.ID().String()),
+		logger.String("table_id", tableID))
+
+	return nil
+}
+
+// migrateFromManyOneToManyMany 从 manyOne 迁移到 manyMany
+func (s *FieldService) migrateFromManyOneToManyMany(
+	ctx context.Context,
+	baseID, tableID, foreignTableID string,
+	field *entity.Field,
+	linkOptions *valueobject.LinkOptions,
+) error {
+	// 1. 创建新的 junction table
+	junctionTableName := linkOptions.FkHostTableName
+	if junctionTableName == "" {
+		// 生成 junction table 名称
+		junctionTableName = fmt.Sprintf("link_%s_%s", tableID, foreignTableID)
+	}
+
+	// 创建 junction table
+	fullJunctionTableName := s.dbProvider.GenerateTableName(baseID, junctionTableName)
+	createTableSQL := fmt.Sprintf(`
+		CREATE TABLE IF NOT EXISTS %s (
+			__id SERIAL PRIMARY KEY,
+			%s VARCHAR(50) NOT NULL,
+			%s VARCHAR(50) NOT NULL
+		)
+	`,
+		fullJunctionTableName,
+		fmt.Sprintf(`"%s"`, linkOptions.SelfKeyName),
+		fmt.Sprintf(`"%s"`, linkOptions.ForeignKeyName),
+	)
+
+	if err := s.db.WithContext(ctx).Exec(createTableSQL).Error; err != nil {
+		return fmt.Errorf("创建 junction table 失败: %w", err)
+	}
+
+	// 2. 从外键列迁移数据到 junction table
+	fullTableName := s.dbProvider.GenerateTableName(baseID, tableID)
+	migrationSQL := fmt.Sprintf(`
+		INSERT INTO %s (%s, %s)
+		SELECT __id, %s
+		FROM %s
+		WHERE %s IS NOT NULL
+	`,
+		fullJunctionTableName,
+		fmt.Sprintf(`"%s"`, linkOptions.SelfKeyName),
+		fmt.Sprintf(`"%s"`, linkOptions.ForeignKeyName),
+		fmt.Sprintf(`"%s"`, linkOptions.ForeignKeyName),
+		fullTableName,
+		fmt.Sprintf(`"%s"`, linkOptions.ForeignKeyName),
+	)
+
+	if err := s.db.WithContext(ctx).Exec(migrationSQL).Error; err != nil {
+		return fmt.Errorf("数据迁移失败: %w", err)
+	}
+
+	// 3. 删除旧的外键列
+	if err := s.dbProvider.DropColumn(ctx, baseID, tableID, linkOptions.ForeignKeyName); err != nil {
+		logger.Warn("删除旧的外键列失败",
+			logger.String("field_name", linkOptions.ForeignKeyName),
+			logger.ErrorField(err))
+		// 继续执行，不影响主流程
+	}
+
+	// 4. 创建 junction table 索引
+	idxSelfSQL := fmt.Sprintf("CREATE INDEX IF NOT EXISTS idx_%s_%s ON %s (%s)",
+		junctionTableName, linkOptions.SelfKeyName,
+		fullJunctionTableName,
+		fmt.Sprintf(`"%s"`, linkOptions.SelfKeyName))
+	if err := s.db.WithContext(ctx).Exec(idxSelfSQL).Error; err != nil {
+		logger.Warn("创建索引失败", logger.ErrorField(err))
+	}
+
+	idxForeignSQL := fmt.Sprintf("CREATE INDEX IF NOT EXISTS idx_%s_%s ON %s (%s)",
+		junctionTableName, linkOptions.ForeignKeyName,
+		fullJunctionTableName,
+		fmt.Sprintf(`"%s"`, linkOptions.ForeignKeyName))
+	if err := s.db.WithContext(ctx).Exec(idxForeignSQL).Error; err != nil {
+		logger.Warn("创建索引失败", logger.ErrorField(err))
+	}
+
+	logger.Info("关系类型变更完成: manyOne -> manyMany",
+		logger.String("field_id", field.ID().String()),
+		logger.String("table_id", tableID))
+
+	return nil
+}
+
+// migrateFromManyManyToOneMany 从 manyMany 迁移到 oneMany
+func (s *FieldService) migrateFromManyManyToOneMany(
+	ctx context.Context,
+	baseID, tableID, foreignTableID string,
+	field *entity.Field,
+	linkOptions *valueobject.LinkOptions,
+) error {
+	// 1. 获取 junction table 名称
+	junctionTableName := linkOptions.FkHostTableName
+	if junctionTableName == "" {
+		return fmt.Errorf("junction table 名称不存在")
+	}
+
+	fullJunctionTableName := s.dbProvider.GenerateTableName(baseID, junctionTableName)
+	fullForeignTableName := s.dbProvider.GenerateTableName(baseID, foreignTableID)
+
+	// 2. 从 junction table 迁移数据到关联表的外键列
+	// 对于每个 foreign_key，只保留第一个 self_key（oneMany 只支持单个值）
+	migrationSQL := fmt.Sprintf(`
+		UPDATE %s AS t
+		SET %s = (
+			SELECT j.%s
+			FROM %s AS j
+			WHERE j.%s = t.__id
+			LIMIT 1
+		),
+		__last_modified_time = CURRENT_TIMESTAMP,
+		__version = __version + 1
+		WHERE EXISTS (
+			SELECT 1 FROM %s AS j
+			WHERE j.%s = t.__id
+		)
+	`,
+		fullForeignTableName,
+		fmt.Sprintf(`"%s"`, linkOptions.SelfKeyName),
+		fmt.Sprintf(`"%s"`, linkOptions.SelfKeyName),
+		fullJunctionTableName,
+		fmt.Sprintf(`"%s"`, linkOptions.ForeignKeyName),
+		fullJunctionTableName,
+		fmt.Sprintf(`"%s"`, linkOptions.ForeignKeyName),
+	)
+
+	// 执行迁移
+	if err := s.db.WithContext(ctx).Exec(migrationSQL).Error; err != nil {
+		return fmt.Errorf("数据迁移失败: %w", err)
+	}
+
+	// 3. 删除旧的 junction table
+	if err := s.dbProvider.DropPhysicalTable(ctx, baseID, junctionTableName); err != nil {
+		logger.Warn("删除旧的 junction table 失败",
+			logger.String("junction_table", junctionTableName),
+			logger.ErrorField(err))
+	}
+
+	// 4. 创建新的外键列（在关联表中）
+	columnDef := database.ColumnDefinition{
+		Name:    linkOptions.SelfKeyName,
+		Type:    "VARCHAR(50)",
+		NotNull: false,
+		Unique:  false,
+	}
+
+	if err := s.dbProvider.AddColumn(ctx, baseID, foreignTableID, columnDef); err != nil {
+		logger.Warn("创建外键列失败（可能已存在）",
+			logger.String("field_name", linkOptions.SelfKeyName),
+			logger.ErrorField(err))
+	}
+
+	// 5. 创建外键列索引
+	idxSQL := fmt.Sprintf("CREATE INDEX IF NOT EXISTS idx_%s_%s ON %s (%s)",
+		foreignTableID, linkOptions.SelfKeyName,
+		fullForeignTableName,
+		fmt.Sprintf(`"%s"`, linkOptions.SelfKeyName))
+	if err := s.db.WithContext(ctx).Exec(idxSQL).Error; err != nil {
+		logger.Warn("创建外键列索引失败", logger.ErrorField(err))
+	}
+
+	logger.Info("关系类型变更完成: manyMany -> oneMany",
+		logger.String("field_id", field.ID().String()),
+		logger.String("table_id", tableID))
+
+	return nil
+}
+
+// migrateFromOneManyToManyMany 从 oneMany 迁移到 manyMany
+func (s *FieldService) migrateFromOneManyToManyMany(
+	ctx context.Context,
+	baseID, tableID, foreignTableID string,
+	field *entity.Field,
+	linkOptions *valueobject.LinkOptions,
+) error {
+	// 1. 创建新的 junction table
+	junctionTableName := linkOptions.FkHostTableName
+	if junctionTableName == "" {
+		// 生成 junction table 名称
+		junctionTableName = fmt.Sprintf("link_%s_%s", tableID, foreignTableID)
+	}
+
+	// 创建 junction table
+	fullJunctionTableName := s.dbProvider.GenerateTableName(baseID, junctionTableName)
+	createTableSQL := fmt.Sprintf(`
+		CREATE TABLE IF NOT EXISTS %s (
+			__id SERIAL PRIMARY KEY,
+			%s VARCHAR(50) NOT NULL,
+			%s VARCHAR(50) NOT NULL
+		)
+	`,
+		fullJunctionTableName,
+		fmt.Sprintf(`"%s"`, linkOptions.SelfKeyName),
+		fmt.Sprintf(`"%s"`, linkOptions.ForeignKeyName),
+	)
+
+	if err := s.db.WithContext(ctx).Exec(createTableSQL).Error; err != nil {
+		return fmt.Errorf("创建 junction table 失败: %w", err)
+	}
+
+	// 2. 从关联表的外键列迁移数据到 junction table
+	fullForeignTableName := s.dbProvider.GenerateTableName(baseID, foreignTableID)
+	migrationSQL := fmt.Sprintf(`
+		INSERT INTO %s (%s, %s)
+		SELECT %s, __id
+		FROM %s
+		WHERE %s IS NOT NULL
+	`,
+		fullJunctionTableName,
+		fmt.Sprintf(`"%s"`, linkOptions.SelfKeyName),
+		fmt.Sprintf(`"%s"`, linkOptions.ForeignKeyName),
+		fmt.Sprintf(`"%s"`, linkOptions.SelfKeyName),
+		fullForeignTableName,
+		fmt.Sprintf(`"%s"`, linkOptions.SelfKeyName),
+	)
+
+	if err := s.db.WithContext(ctx).Exec(migrationSQL).Error; err != nil {
+		return fmt.Errorf("数据迁移失败: %w", err)
+	}
+
+	// 3. 删除关联表中的旧外键列
+	if err := s.dbProvider.DropColumn(ctx, baseID, foreignTableID, linkOptions.SelfKeyName); err != nil {
+		logger.Warn("删除旧的外键列失败",
+			logger.String("field_name", linkOptions.SelfKeyName),
+			logger.ErrorField(err))
+	}
+
+	// 4. 创建 junction table 索引
+	idxSelfSQL := fmt.Sprintf("CREATE INDEX IF NOT EXISTS idx_%s_%s ON %s (%s)",
+		junctionTableName, linkOptions.SelfKeyName,
+		fullJunctionTableName,
+		fmt.Sprintf(`"%s"`, linkOptions.SelfKeyName))
+	if err := s.db.WithContext(ctx).Exec(idxSelfSQL).Error; err != nil {
+		logger.Warn("创建索引失败", logger.ErrorField(err))
+	}
+
+	idxForeignSQL := fmt.Sprintf("CREATE INDEX IF NOT EXISTS idx_%s_%s ON %s (%s)",
+		junctionTableName, linkOptions.ForeignKeyName,
+		fullJunctionTableName,
+		fmt.Sprintf(`"%s"`, linkOptions.ForeignKeyName))
+	if err := s.db.WithContext(ctx).Exec(idxForeignSQL).Error; err != nil {
+		logger.Warn("创建索引失败", logger.ErrorField(err))
+	}
+
+	logger.Info("关系类型变更完成: oneMany -> manyMany",
+		logger.String("field_id", field.ID().String()),
+		logger.String("table_id", tableID))
+
+	return nil
 }

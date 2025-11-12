@@ -46,9 +46,10 @@ type DatabaseConfig struct {
 	Password        string        `mapstructure:"password"`
 	Name            string        `mapstructure:"name"`
 	SSLMode         string        `mapstructure:"ssl_mode"`
-	MaxIdleConns    int           `mapstructure:"max_idle_conns"`
-	MaxOpenConns    int           `mapstructure:"max_open_conns"`
-	ConnMaxLifetime time.Duration `mapstructure:"conn_max_lifetime"`
+	MaxIdleConns     int           `mapstructure:"max_idle_conns"`
+	MaxOpenConns     int           `mapstructure:"max_open_conns"`
+	ConnMaxLifetime  time.Duration `mapstructure:"conn_max_lifetime"`
+	ConnMaxIdleTime  time.Duration `mapstructure:"conn_max_idle_time"` // ✅ 优化：添加空闲连接超时配置
 	LogLevel        string        `mapstructure:"log_level"`
 }
 
@@ -187,9 +188,10 @@ func setDefaults() {
 	viper.SetDefault("database.password", "")
 	viper.SetDefault("database.name", "easytable")
 	viper.SetDefault("database.ssl_mode", "disable")
-	viper.SetDefault("database.max_idle_conns", 25)
-	viper.SetDefault("database.max_open_conns", 200)
-	viper.SetDefault("database.conn_max_lifetime", "1h")
+	viper.SetDefault("database.max_idle_conns", 50)        // ✅ 优化：增加空闲连接数（25 -> 50）
+	viper.SetDefault("database.max_open_conns", 300)       // ✅ 优化：增加最大连接数（200 -> 300）
+	viper.SetDefault("database.conn_max_lifetime", "2h")   // ✅ 优化：增加连接生命周期（1h -> 2h）
+	viper.SetDefault("database.conn_max_idle_time", "30m") // ✅ 优化：添加空闲连接超时（30分钟）
 	viper.SetDefault("database.log_level", "info")
 
 	// Redis defaults

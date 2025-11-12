@@ -4,7 +4,9 @@
   "description": "Link 字段全面功能测试",
   "type": "module",
   "scripts": {
-    "test": "tsx comprehensive-link-field-test.ts"
+    "test": "tsx comprehensive-link-field-test.ts",
+    "test:alignment": "tsx teable-alignment-test.ts",
+    "test:all": "tsx comprehensive-link-field-test.ts && tsx teable-alignment-test.ts"
   },
   "dependencies": {
     "dotenv": "^16.0.0"

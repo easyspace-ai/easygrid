@@ -1,22 +1,22 @@
 -- 创建视图表
 CREATE TABLE IF NOT EXISTS view (
-    id VARCHAR(255) PRIMARY KEY,
-    name VARCHAR(255) NOT NULL,
+    id VARCHAR(30) PRIMARY KEY,
+    name VARCHAR(100) NOT NULL,
     description TEXT,
-    table_id VARCHAR(255) NOT NULL,
-    type VARCHAR(50) NOT NULL,
-    filter TEXT,
-    sort TEXT,
-    "group" TEXT,
-    column_meta TEXT,
-    options TEXT,
-    "order" DOUBLE PRECISION NOT NULL,
+    table_id VARCHAR(30) NOT NULL,
+    type VARCHAR(20) NOT NULL,
+    filter JSONB,
+    sort JSONB,
+    "group" JSONB,
+    column_meta JSONB,
+    options JSONB,
+    "order" DOUBLE PRECISION,
     version INTEGER NOT NULL DEFAULT 1,
     is_locked BOOLEAN DEFAULT FALSE,
     enable_share BOOLEAN DEFAULT FALSE,
-    share_id VARCHAR(255) UNIQUE,
-    share_meta TEXT,
-    created_by VARCHAR(255) NOT NULL,
+    share_id VARCHAR(50) UNIQUE,
+    share_meta JSONB,
+    created_by VARCHAR(30) NOT NULL,
     created_time TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
     last_modified_time TIMESTAMP,
     deleted_time TIMESTAMP,
@@ -37,17 +37,17 @@ COMMENT ON COLUMN view.name IS '视图名称';
 COMMENT ON COLUMN view.description IS '视图描述';
 COMMENT ON COLUMN view.table_id IS '所属表格ID';
 COMMENT ON COLUMN view.type IS '视图类型: grid, kanban, gallery, form, calendar';
-COMMENT ON COLUMN view.filter IS '过滤器配置(JSON)';
-COMMENT ON COLUMN view.sort IS '排序配置(JSON)';
-COMMENT ON COLUMN view."group" IS '分组配置(JSON)';
-COMMENT ON COLUMN view.column_meta IS '列配置(JSON)';
-COMMENT ON COLUMN view.options IS '视图选项(JSON)';
+COMMENT ON COLUMN view.filter IS '过滤器配置(JSONB)';
+COMMENT ON COLUMN view.sort IS '排序配置(JSONB)';
+COMMENT ON COLUMN view."group" IS '分组配置(JSONB)';
+COMMENT ON COLUMN view.column_meta IS '列配置(JSONB)';
+COMMENT ON COLUMN view.options IS '视图选项(JSONB)';
+COMMENT ON COLUMN view.share_meta IS '分享元数据(JSONB)';
 COMMENT ON COLUMN view."order" IS '视图排序位置';
 COMMENT ON COLUMN view.version IS '版本号';
 COMMENT ON COLUMN view.is_locked IS '是否锁定';
 COMMENT ON COLUMN view.enable_share IS '是否启用分享';
 COMMENT ON COLUMN view.share_id IS '分享ID';
-COMMENT ON COLUMN view.share_meta IS '分享元数据(JSON)';
 COMMENT ON COLUMN view.created_by IS '创建人';
 COMMENT ON COLUMN view.created_time IS '创建时间';
 COMMENT ON COLUMN view.last_modified_time IS '最后修改时间';

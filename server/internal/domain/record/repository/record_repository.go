@@ -78,4 +78,5 @@ type RecordFilter struct {
 	OrderDir     string                 // asc, desc
 	Limit        int
 	Offset       int
+	Cursor       string                 // ✅ 优化：游标分页（基于 __auto_number）
 }

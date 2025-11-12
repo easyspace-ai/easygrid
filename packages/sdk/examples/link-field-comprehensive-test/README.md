@@ -2,8 +2,10 @@
 
 这是一个全面的 Link 字段功能测试项目，用于验证服务器端 Link 字段的所有功能是否正常工作。
 
-## 测试覆盖
+## 测试文件
 
+### 1. `comprehensive-link-field-test.ts`
+基础功能测试，覆盖：
 1. **对称字段自动创建**（manyMany、manyOne、oneMany、oneOne 关系）
 2. **对称字段自动同步**（记录更新时）
 3. **对称字段自动删除**（字段删除时）
@@ -12,6 +14,16 @@
 6. **Junction table 的正确创建和使用**（manyMany 关系）
 7. **记录更新时的外键保存**
 8. **各种关系类型的完整测试**
+
+### 2. `teable-alignment-test.ts` ⭐ 新增
+**Teable 对齐功能验证测试**，专门验证本次开发完成的功能：
+1. ✅ **对称字段自动创建**（所有关系类型：manyMany、manyOne、oneMany、oneOne）
+2. ✅ **对称字段自动同步**（所有关系类型，记录更新时）
+3. ✅ **对称字段自动删除**（字段删除时）
+4. ✅ **Count 字段依赖**（正确识别对 Link 字段的依赖，自动计算）
+5. ✅ **完整性修复逻辑**（所有关系类型）
+
+## 测试覆盖
 
 ## 运行测试
 
@@ -23,15 +35,31 @@
 
 ### 运行方式
 
+#### 运行基础测试
 ```bash
 cd packages/sdk/examples/link-field-comprehensive-test
 tsx comprehensive-link-field-test.ts
 ```
 
 或者使用 npm script：
-
 ```bash
-npm run test:link-comprehensive
+npm run test
+```
+
+#### 运行 Teable 对齐测试（推荐）⭐
+```bash
+cd packages/sdk/examples/link-field-comprehensive-test
+tsx teable-alignment-test.ts
+```
+
+或者使用 npm script：
+```bash
+npm run test:alignment
+```
+
+#### 运行所有测试
+```bash
+npm run test:all
 ```
 
 ### 环境变量
