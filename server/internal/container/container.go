@@ -9,9 +9,12 @@ import (
 	"gorm.io/gorm"
 
 	"github.com/easyspace-ai/luckdb/server/internal/application"
+	fieldService "github.com/easyspace-ai/luckdb/server/internal/application/field"
+	recordService "github.com/easyspace-ai/luckdb/server/internal/application/record"
 	"github.com/easyspace-ai/luckdb/server/internal/config"
 	"github.com/easyspace-ai/luckdb/server/internal/events"
-	"github.com/easyspace-ai/luckdb/server/internal/infrastructure/cache"
+	infraCache "github.com/easyspace-ai/luckdb/server/internal/infrastructure/cache"
+	cache "github.com/easyspace-ai/luckdb/server/internal/infrastructure/cache"
 	"github.com/easyspace-ai/luckdb/server/internal/infrastructure/database"
 	"github.com/easyspace-ai/luckdb/server/internal/infrastructure/repository"
 	"github.com/easyspace-ai/luckdb/server/internal/infrastructure/storage"
@@ -30,8 +33,10 @@ import (
 
 	// 计算服务相关包
 	linkService "github.com/easyspace-ai/luckdb/server/internal/domain/calculation/link"
+	"github.com/easyspace-ai/luckdb/server/internal/domain/calculation/dependency"
 	"github.com/easyspace-ai/luckdb/server/internal/domain/calculation/lookup"
 	"github.com/easyspace-ai/luckdb/server/internal/domain/calculation/rollup"
+	"github.com/easyspace-ai/luckdb/server/internal/domain/fields/factory"
 	tableService "github.com/easyspace-ai/luckdb/server/internal/domain/table/service"
 
 	// JSVM 和实时通信服务
@@ -81,6 +86,18 @@ type Container struct {
 	viewService         *application.ViewService
 	attachmentService   attachmentRepo.Service
 
+	// Record专门服务 ✨
+	recordCRUDService      *recordService.RecordCRUDService
+	recordValidationService *recordService.RecordValidationService
+	recordLinkService      *recordService.RecordLinkService
+
+	// Field专门服务 ✨
+	fieldCRUDService       *fieldService.FieldCRUDService
+	fieldOptionsService    *fieldService.FieldOptionsService
+	fieldDependencyService *fieldService.FieldDependencyService
+	fieldSchemaService     *fieldService.FieldSchemaService
+	fieldLinkService       *fieldService.FieldLinkService
+
 	// 基础设施服务 ✨
 	batchService       *application.BatchService       // 批量操作服务
 	cacheService       *application.CacheService       // 统一缓存服务
@@ -98,6 +115,9 @@ type Container struct {
 
 	// 兼容性：保留原有的计算服务
 	calculationService *application.CalculationService // 计算引擎服务 ✨
+
+	// 依赖图仓储 ✨
+	dependencyGraphRepo *dependency.DependencyGraphRepository
 
 	// Link 字段服务 ✨
 	linkService            *tableService.LinkService
@@ -344,18 +364,31 @@ func (c *Container) initServices() {
 	// 12. ViewService（一次性初始化，传入正确的businessEventManager）
 	c.viewService = application.NewViewService(c.viewRepository, c.tableRepository, c.businessEventManager)
 
-	// 13. FieldService（使用业务事件管理器创建广播器）
+	// 13. ✨ 初始化依赖图仓储（需要在FieldService之前）
+	c.initDependencyGraphRepository()
+
+	// 14. ✨ 初始化Field专门服务（需要在FieldService之前）
+	c.initFieldServices()
+
+	// 15. FieldService（使用业务事件管理器创建广播器，协调器模式）
 	fieldBroadcaster := application.NewFieldBroadcaster(c.businessEventManager)
+	fieldFactory := factory.NewFieldFactory()
 	c.fieldService = application.NewFieldService(
+		c.fieldCRUDService,
+		c.fieldOptionsService,
+		c.fieldDependencyService,
+		c.fieldSchemaService,
+		c.fieldLinkService,
+		fieldFactory,
 		c.fieldRepository,
-		nil,               // depGraphRepo（可选，待实现依赖图缓存仓储）
-		fieldBroadcaster,  // ✅ 使用业务事件管理器广播字段变更
-		c.tableRepository, // ✅ 注入TableRepository
-		c.dbProvider,      // ✅ 注入DBProvider
-		c.db.GetDB(),      // ✅ 注入数据库连接（用于 Link 字段 schema 创建）
+		c.dependencyGraphRepo, // ✅ 注入依赖图仓储
+		fieldBroadcaster,      // ✅ 使用业务事件管理器广播字段变更
+		c.tableRepository,     // ✅ 注入TableRepository
+		c.dbProvider,          // ✅ 注入DBProvider
+		c.db.GetDB(),          // ✅ 注入数据库连接（用于 Link 字段 schema 创建）
 	)
 
-	// 14. TableService（依赖 FieldService 和 ViewService）
+	// 15. TableService（依赖 FieldService 和 ViewService）
 	c.tableService = application.NewTableService(
 		c.tableRepository,
 		c.baseRepository,
@@ -366,7 +399,7 @@ func (c *Container) initServices() {
 		c.dbProvider,  // ✅ 注入DBProvider
 	)
 
-	// 15. ✨ 初始化模块化计算服务（重构后的架构）
+	// 16. ✨ 初始化模块化计算服务（重构后的架构）
 	c.initCalculationServices()
 
 	// ✨ 计算引擎服务（在RecordService之前初始化）
@@ -411,12 +444,19 @@ func (c *Container) initServices() {
 	// ✅ Phase 2: 类型转换服务
 	typecastService := application.NewTypecastService(c.fieldRepository)
 
-	// 记录服务（集成计算引擎+验证） ✨ 移除旧 WebSocket 广播，改由业务事件+YJS/SSE
+	// ✨ 初始化Record专门服务
+	// 注意：typecastService实现了recordService.TypecastService接口
+	c.initRecordServices(recordService.TypecastService(typecastService), c.linkService)
+
+	// 记录服务（协调器） ✨ 移除旧 WebSocket 广播，改由业务事件+YJS/SSE
 	// 注意：ShareDB 服务将在 initJSVMServices 中初始化，所以这里先传 nil
 	c.recordService = application.NewRecordService(
-		c.recordRepository,
+		c.recordCRUDService,      // ✨ CRUD服务
+		c.recordValidationService, // ✨ 验证服务
+		c.recordLinkService,      // ✨ Link服务
+		c.recordRepository,       // 保留原有依赖
 		c.fieldRepository,
-		c.tableRepository,      // ✅ 注入表仓储，用于检查表存在性
+		c.tableRepository,
 		c.calculationService,   // 注入计算服务 ✨
 		nil,                    // 🔥 不再使用旧 WS 广播器
 		c.businessEventManager, // ✨ 业务事件管理器
@@ -428,6 +468,32 @@ func (c *Container) initServices() {
 
 	// ✅ 初始化附件服务
 	c.initAttachmentService()
+}
+
+// initRecordServices 初始化Record专门服务
+func (c *Container) initRecordServices(typecastService recordService.TypecastService, linkService *tableService.LinkService) {
+	logger.Info("正在初始化Record专门服务...")
+
+	// 1. RecordCRUDService
+	c.recordCRUDService = recordService.NewRecordCRUDService(
+		c.recordRepository,
+		c.tableRepository,
+	)
+
+	// 2. RecordValidationService
+	c.recordValidationService = recordService.NewRecordValidationService(
+		c.fieldRepository,
+		typecastService,
+	)
+
+	// 3. RecordLinkService
+	c.recordLinkService = recordService.NewRecordLinkService(
+		c.recordRepository,
+		c.fieldRepository,
+		linkService,
+	)
+
+	logger.Info("✅ Record专门服务已初始化")
 }
 
 // initAttachmentService 初始化附件服务
@@ -487,6 +553,78 @@ func (c *Container) initAttachmentService() {
 	)
 
 	logger.Info("✅ 附件服务已初始化")
+}
+
+// initDependencyGraphRepository 初始化依赖图仓储
+func (c *Container) initDependencyGraphRepository() {
+	logger.Info("正在初始化依赖图仓储...")
+
+	// 1. 创建依赖图构建器
+	// 需要将FieldRepository适配为dependency.FieldRepository接口
+	depGraphBuilder := dependency.NewDependencyGraphBuilder(
+		&infraCache.FieldRepositoryAdapter{
+			FieldRepo: c.fieldRepository,
+		},
+	)
+
+	// 2. 创建缓存适配器（将CacheService适配为CacheRepository接口）
+	var cacheRepo dependency.CacheRepository
+	if c.cacheService != nil {
+		cacheRepo = application.NewDependencyCacheAdapter(c.cacheService)
+	} else {
+		// 如果没有缓存服务，使用no-op实现
+		cacheRepo = &application.NoOpCacheRepository{}
+	}
+
+	// 3. 创建依赖图仓储（默认TTL：1小时）
+	c.dependencyGraphRepo = dependency.NewDependencyGraphRepository(
+		cacheRepo,
+		depGraphBuilder,
+		1*time.Hour,
+	)
+
+	logger.Info("✅ 依赖图仓储已初始化")
+}
+
+// initFieldServices 初始化Field专门服务
+func (c *Container) initFieldServices() {
+	logger.Info("正在初始化Field专门服务...")
+
+	// 1. FieldFactory
+	fieldFactory := factory.NewFieldFactory()
+
+	// 2. FieldCRUDService
+	c.fieldCRUDService = fieldService.NewFieldCRUDService(
+		c.fieldRepository,
+		fieldFactory,
+	)
+
+	// 3. FieldOptionsService（无状态服务）
+	c.fieldOptionsService = fieldService.NewFieldOptionsService()
+
+	// 4. FieldDependencyService
+	c.fieldDependencyService = fieldService.NewFieldDependencyService(
+		c.fieldRepository,
+		c.dependencyGraphRepo,
+	)
+
+	// 5. FieldSchemaService
+	c.fieldSchemaService = fieldService.NewFieldSchemaService(
+		c.tableRepository,
+		c.dbProvider,
+		c.db.GetDB(),
+	)
+
+	// 6. FieldLinkService
+	c.fieldLinkService = fieldService.NewFieldLinkService(
+		c.fieldRepository,
+		c.tableRepository,
+		fieldFactory,
+		c.dbProvider,
+		c.db.GetDB(),
+	)
+
+	logger.Info("✅ Field专门服务已初始化")
 }
 
 // initCalculationServices 初始化模块化计算服务
@@ -804,14 +942,31 @@ func (c *Container) StopServices() {
 
 // initInfrastructureServices 初始化基础设施服务
 func (c *Container) initInfrastructureServices() {
-	// 批量操作服务
-	c.batchService = application.NewBatchService(
+	// 批量操作服务（使用配置）
+	batchConfig := &application.BatchConfig{
+		DefaultSize:      c.cfg.Batch.DefaultSize,
+		MaxSize:          c.cfg.Batch.MaxSize,
+		MinSize:          c.cfg.Batch.MinSize,
+		EnableAutoAdjust: c.cfg.Batch.EnableAutoAdjust,
+	}
+	if batchConfig.DefaultSize == 0 {
+		batchConfig.DefaultSize = 100 // 默认值
+	}
+	if batchConfig.MaxSize == 0 {
+		batchConfig.MaxSize = 1000 // 默认值
+	}
+	if batchConfig.MinSize == 0 {
+		batchConfig.MinSize = 10 // 默认值
+	}
+	
+	c.batchService = application.NewBatchServiceWithConfig(
 		c.fieldRepository,
 		c.recordRepository,
 		c.tableRepository,
 		c.dbProvider,
 		c.db.GetDB(),
 		c.errorService,
+		batchConfig,
 	)
 
 	// 缓存服务（如果还未初始化，则初始化）

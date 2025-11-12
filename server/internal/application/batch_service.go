@@ -55,6 +55,43 @@ func NewBatchService(
 	}
 }
 
+// NewBatchServiceWithConfig 创建批量操作服务（带配置）
+// ✅ 新增：支持从配置读取批量操作参数
+func NewBatchServiceWithConfig(
+	fieldRepo repository.FieldRepository,
+	recordRepo recordRepo.RecordRepository,
+	tableRepo tableRepo.TableRepository,
+	dbProvider database.DBProvider,
+	db *gorm.DB,
+	errorService *ErrorService,
+	batchConfig *BatchConfig,
+) *BatchService {
+	batchSize := 100 // 默认值
+	if batchConfig != nil && batchConfig.DefaultSize > 0 {
+		batchSize = batchConfig.DefaultSize
+	}
+
+	return &BatchService{
+		fieldRepo:    fieldRepo,
+		recordRepo:   recordRepo,
+		tableRepo:    tableRepo,
+		dbProvider:  dbProvider,
+		db:          db,
+		errorService: errorService,
+		batchSize:    batchSize,
+		maxRetries:   3,
+		retryDelay:   100 * time.Millisecond,
+	}
+}
+
+// BatchConfig 批量操作配置
+type BatchConfig struct {
+	DefaultSize     int
+	MaxSize         int
+	MinSize         int
+	EnableAutoAdjust bool
+}
+
 // BatchUpdateStrategy 批量更新策略
 type BatchUpdateStrategy int
 
@@ -341,6 +378,58 @@ func (s *BatchService) calculateOptimalBatchSize(recordCount int) int {
 	return baseSize
 }
 
+// getOptimalBatchSize 根据表信息计算最优批量大小
+// ✅ 优化：考虑字段数量和记录数量动态调整批量大小
+func (s *BatchService) getOptimalBatchSize(ctx context.Context, tableID string, recordCount int) int {
+	// 如果记录数很少，直接返回
+	if recordCount < 10 {
+		return recordCount
+	}
+
+	// 获取表信息
+	table, err := s.tableRepo.GetByID(ctx, tableID)
+	if err != nil {
+		return s.calculateOptimalBatchSize(recordCount)
+	}
+	if table == nil {
+		return s.calculateOptimalBatchSize(recordCount)
+	}
+
+	// 获取字段数量
+	fields, err := s.fieldRepo.FindByTableID(ctx, tableID)
+	if err != nil {
+		return s.calculateOptimalBatchSize(recordCount)
+	}
+	fieldCount := len(fields)
+
+	// 根据记录数量和字段数量动态调整
+	// 字段多时减小批量大小（避免 SQL 过大）
+	baseSize := s.batchSize
+	if fieldCount > 20 {
+		baseSize = baseSize / 2 // 字段多时减半
+	}
+
+	if recordCount < 50 {
+		return min(baseSize, recordCount)
+	} else if recordCount < 200 {
+		if fieldCount > 20 {
+			return min(50, recordCount)
+		}
+		return min(100, recordCount)
+	} else if recordCount < 1000 {
+		if fieldCount > 20 {
+			return min(100, recordCount)
+		}
+		return min(200, recordCount)
+	} else {
+		// 大量记录时，字段多时减小批量大小
+		if fieldCount > 20 {
+			return min(200, recordCount)
+		}
+		return min(500, recordCount)
+	}
+}
+
 // min 返回两个整数中的较小值
 func min(a, b int) int {
 	if a < b {
@@ -395,8 +484,8 @@ func (s *BatchService) batchUpdateTableRecords(ctx context.Context, tableID stri
 		}
 	}
 
-	// ✅ 优化：根据记录数量动态调整批量大小
-	optimalBatchSize := s.calculateOptimalBatchSize(len(updates))
+	// ✅ 优化：根据表信息和记录数量动态调整批量大小
+	optimalBatchSize := s.getOptimalBatchSize(ctx, tableID, len(updates))
 	if optimalBatchSize != s.batchSize {
 		logger.Info("动态调整批量大小",
 			logger.String("table_id", tableID),

@@ -48,14 +48,20 @@ func NewServeCmd(configPath *string, version string) *cobra.Command {
 }
 
 func runServe(version string) error {
+	// 记录启动开始时间
+	startTime := time.Now()
+
 	// 加载配置
+	configStart := time.Now()
 	cfg, err := config.Load()
 	if err != nil {
 		fmt.Printf("Failed to load config: %v\n", err)
 		return err
 	}
+	configDuration := time.Since(configStart)
 
 	// 初始化日志
+	loggerStart := time.Now()
 	loggerConfig := logger.LoggerConfig{
 		Level:      cfg.Logger.Level,
 		Format:     cfg.Logger.Format,
@@ -79,19 +85,18 @@ func runServe(version string) error {
 		fmt.Printf("Failed to initialize SQL logger: %v\n", err)
 		return err
 	}
+	loggerDuration := time.Since(loggerStart)
 
 	logger.Info("Starting LuckDB API Server",
 		logger.String("version", version),
 		logger.String("mode", cfg.Server.Mode),
+		logger.Duration("config_load_time", configDuration),
+		logger.Duration("logger_init_time", loggerDuration),
 	)
 
-	// ✅ 安全优化：生产环境强制启用权限检查
-	if cfg.Server.Mode == "production" && cfg.Server.PermissionsDisabled {
-		logger.Fatal("权限检查在生产环境中不能禁用",
-			logger.String("mode", cfg.Server.Mode),
-			logger.Bool("permissions_disabled", cfg.Server.PermissionsDisabled))
-		return fmt.Errorf("permissions cannot be disabled in production mode")
-	}
+	// ✅ 安全：权限检查始终启用，不再支持禁用
+	// 已移除permissions_disabled配置，所有环境都强制启用权限检查
+	logger.Info("权限检查已启用（始终启用，不可禁用）")
 
 	if cfg.SQLLogger.Enabled {
 		logger.Info("SQL Logger enabled",
@@ -100,6 +105,7 @@ func runServe(version string) error {
 	}
 
 	// 创建依赖注入容器
+	containerStart := time.Now()
 	cont := container.NewContainer(cfg)
 
 	// 初始化容器
@@ -107,14 +113,28 @@ func runServe(version string) error {
 		logger.Fatal("Failed to initialize container", logger.ErrorField(err))
 	}
 	defer cont.Close()
+	containerDuration := time.Since(containerStart)
+	logger.Info("Container initialized",
+		logger.Duration("container_init_time", containerDuration),
+	)
 
 	// 启动后台服务
+	servicesStart := time.Now()
 	srvCtx, srvCancel := context.WithCancel(context.Background())
 	defer srvCancel()
 	cont.StartServices(srvCtx)
+	servicesDuration := time.Since(servicesStart)
+	logger.Info("Background services started",
+		logger.Duration("services_start_time", servicesDuration),
+	)
 
 	// 创建Gin引擎
+	routerStart := time.Now()
 	router := setupRouter(cfg, cont, version)
+	routerDuration := time.Since(routerStart)
+	logger.Info("Router setup completed",
+		logger.Duration("router_setup_time", routerDuration),
+	)
 
 	// 创建HTTP服务器
 	srv := &http.Server{
@@ -134,6 +154,35 @@ func runServe(version string) error {
 		if err := srv.ListenAndServe(); err != nil && err != http.ErrServerClosed {
 			logger.Fatal("Server failed to start", logger.ErrorField(err))
 		}
+	}()
+
+	// 等待一小段时间确保服务器真正启动，然后输出启动信息
+	go func() {
+		time.Sleep(200 * time.Millisecond)
+
+		totalDuration := time.Since(startTime)
+		logger.Info("API Server started successfully",
+			logger.Int("port", cfg.Server.Port),
+			logger.String("mode", cfg.Server.Mode),
+			logger.Duration("total_startup_time", totalDuration),
+			logger.Duration("config_load_time", configDuration),
+			logger.Duration("logger_init_time", loggerDuration),
+			logger.Duration("container_init_time", containerDuration),
+			logger.Duration("services_start_time", servicesDuration),
+			logger.Duration("router_setup_time", routerDuration),
+		)
+
+		// 在控制台也输出友好的启动信息
+		fmt.Printf("\n🚀 LuckDB API Server started successfully!\n")
+		fmt.Printf("   Port: %d\n", cfg.Server.Port)
+		fmt.Printf("   Mode: %s\n", cfg.Server.Mode)
+		fmt.Printf("   Total startup time: %v\n", totalDuration.Round(time.Millisecond))
+		fmt.Printf("   - Config load: %v\n", configDuration.Round(time.Millisecond))
+		fmt.Printf("   - Logger init: %v\n", loggerDuration.Round(time.Millisecond))
+		fmt.Printf("   - Container init: %v\n", containerDuration.Round(time.Millisecond))
+		fmt.Printf("   - Services start: %v\n", servicesDuration.Round(time.Millisecond))
+		fmt.Printf("   - Router setup: %v\n", routerDuration.Round(time.Millisecond))
+		fmt.Printf("\n")
 	}()
 
 	// 优雅关闭
@@ -204,7 +253,7 @@ func customRecovery() gin.HandlerFunc {
 					logger.String("path", c.Request.URL.Path),
 					logger.String("ip", c.ClientIP()),
 				)
-				
+
 				// 确保响应头未写入
 				if !c.Writer.Written() {
 					// 返回 500 错误响应

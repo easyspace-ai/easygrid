@@ -5,7 +5,7 @@ run:
   timeout: 5m
   
   # 要检查的Go版本
-  go: "1.21"
+  go: "1.23"
   
   # 跳过的目录
   skip-dirs:
@@ -44,7 +44,8 @@ linters:
     # 额外启用的检查器
     - gofmt         # 检查代码格式
     - goimports     # 检查import格式
-    - golint        # Go代码风格检查
+    - golint        # Go代码风格检查（已废弃，但保留用于兼容）
+    - revive        # Go代码风格检查（golint的替代品）
     - gosec         # 安全检查
     - misspell      # 拼写检查
     - unconvert     # 检查不必要的类型转换
@@ -60,6 +61,34 @@ linters:
     - lll           # 行长度检查
     - whitespace    # 空白字符检查
     - wsl           # 空行检查
+    - exportloopref # 检查循环中的引用导出
+    - gocritic      # 代码质量检查
+    - godot         # 检查注释是否以句号结尾
+    - gofumpt       # 更严格的代码格式化
+    - nilerr        # 检查nil错误返回
+    - prealloc      # 检查可以预分配的切片
+    - thelper       # 测试助手检查
+    - tparallel     # 检查并行测试
+    - exhaustive    # 检查switch语句是否完整
+    - forbidigo     # 禁止特定函数调用
+    - gochecknoglobals # 检查全局变量
+    - gochecknoinits  # 检查init函数
+    - goerr113      # 检查错误处理
+    - gomnd         # 检查魔数
+    - gomodguard    # 检查模块依赖
+    - goprintffuncname # 检查printf函数命名
+    - gosec         # 安全检查（已启用，这里确保）
+    - interfacer    # 检查接口使用（已废弃但保留）
+    - makezero      # 检查make([]T, n)应该使用make([]T, 0, n)
+    - musttag       # 检查结构体标签
+    - nestif        # 检查嵌套if语句
+    - noctx         # 检查context传递
+    - nolintlint    # 检查nolint注释
+    - paralleltest  # 检查并行测试
+    - tagliatelle   # 检查结构体标签命名
+    - testpackage   # 检查测试包命名
+    - wrapcheck     # 检查错误包装
+    - wastedassign  # 检查浪费的赋值
     
   disable:
     - deadcode      # 已废弃，使用unused替代
@@ -88,7 +117,7 @@ linters-settings:
   # goimports配置
   goimports:
     # 本地包前缀
-    local-prefixes: teable-go-backend
+    local-prefixes: github.com/easyspace-ai/luckdb/server
     
   # golint配置
   golint:
@@ -104,13 +133,201 @@ linters-settings:
     
   # gocyclo配置
   gocyclo:
-    # 最大循环复杂度
-    min-complexity: 15
+    # 最大循环复杂度（降低以提高代码质量）
+    min-complexity: 12
     
   # gocognit配置
   gocognit:
-    # 最大认知复杂度
-    min-complexity: 20
+    # 最大认知复杂度（降低以提高代码质量）
+    min-complexity: 15
+    
+  # revive配置（golint的替代品）
+  revive:
+    # 最小置信度
+    min-confidence: 0.8
+    # 启用的规则
+    enable-all-rules: false
+    rules:
+      - name: exported
+        severity: warning
+      - name: var-naming
+        severity: warning
+      - name: package-comments
+        severity: warning
+      - name: range
+        severity: warning
+      - name: increment-decrement
+        severity: warning
+      - name: error-return
+        severity: error
+      - name: error-naming
+        severity: error
+      - name: errorf
+        severity: error
+      - name: if-return
+        severity: warning
+      - name: indent-error-flow
+        severity: warning
+      - name: unexported-return
+        severity: warning
+      - name: unhandled-error
+        severity: error
+      - name: unnecessary-stmt
+        severity: warning
+      - name: waitgroup-by-value
+        severity: error
+      - name: context-keys-type
+        severity: error
+      - name: context-as-argument
+        severity: warning
+      
+  # gocritic配置
+  gocritic:
+    enabled-tags:
+      - diagnostic
+      - experimental
+      - opinionated
+      - performance
+      - style
+    disabled-checks:
+      - dupImport # 允许重复导入（某些情况下需要）
+      - ifElseChain # 允许if-else链
+    enabled-checks:
+      - appendAssign
+      - argOrder
+      - badCall
+      - badCond
+      - badLock
+      - badRegexp
+      - boolExprSimplify
+      - builtinShadow
+      - captLocal
+      - caseOrder
+      - commentFormatting
+      - commentedOutCode
+      - defaultCaseOrder
+      - deprecatedComment
+      - docStub
+      - dupArg
+      - dupBranchBody
+      - dupCase
+      - dupSubExpr
+      - elseif
+      - emptyFallthrough
+      - equalFold
+      - evalOrder
+      - exitAfterDefer
+      - flagName
+      - hexLiteral
+      - ifElseChain
+      - importShadow
+      - indexAlloc
+      - initClause
+      - mapKey
+      - methodExprCall
+      - nilValReturn
+      - octalLiteral
+      - paramTypeCombine
+      - rangeExprCopy
+      - rangeValCopy
+      - regexpMust
+      - singleCaseSwitch
+      - sloppyReassign
+      - sloppyTypeAssert
+      - stringXbytes
+      - switchTrue
+      - typeAssertChain
+      - typeSwitchVar
+      - typeUnparen
+      - underef
+      - unlabelStmt
+      - unlambda
+      - unslice
+      - valSwap
+      - weakCond
+      - whyNoLint
+      - wrapperFunc
+      
+  # godot配置（注释检查）
+  godot:
+    # 检查所有注释
+    check-all: true
+    # 范围：所有注释
+    scope: all
+    # 排除的注释
+    exclude:
+      - "^TODO:"
+      - "^FIXME:"
+      - "^XXX:"
+      - "^HACK:"
+      
+  # gomnd配置（魔数检查）
+  gomnd:
+    # 忽略的数字
+    ignored-numbers:
+      - "0"
+      - "1"
+      - "2"
+      - "3"
+      - "4"
+      - "5"
+      - "10"
+      - "24"
+      - "60"
+      - "100"
+      - "1000"
+      - "1024"
+      - "2048"
+      - "4096"
+      - "8192"
+    # 忽略的文件
+    ignored-files:
+      - ".*_test.go"
+    # 忽略的函数
+    ignored-functions:
+      - "time.Sleep"
+      - "fmt.Sprintf"
+      - "fmt.Printf"
+      
+  # wrapcheck配置（错误包装检查）
+  wrapcheck:
+    # 忽略的包
+    ignoreSigs:
+      - "errors.New"
+      - "fmt.Errorf"
+      - "context.Context"
+      
+  # forbidigo配置（禁止特定函数）
+  forbidigo:
+    # 禁止的函数
+    forbid:
+      - "fmt.Print.*"
+      - "fmt.Sprint.*"
+      - "os.Exit"
+      - "log\\.Print.*"
+      - "log\\.Fatal.*"
+      - "log\\.Panic.*"
+    # 排除的文件
+    exclude:
+      - ".*_test.go"
+      - "cmd/.*"
+      
+  # gochecknoglobals配置（全局变量检查）
+  gochecknoglobals:
+    # 允许的全局变量
+    allow:
+      - "^_$"  # 允许下划线变量
+      
+  # gochecknoinits配置（init函数检查）
+  gochecknoinits:
+    # 允许的init函数
+    allow:
+      - "^init$"
+      
+  # nestif配置（嵌套if检查）
+  nestif:
+    # 最大嵌套深度
+    min-complexity: 4
     
   # dupl配置
   dupl:
@@ -128,8 +345,10 @@ linters-settings:
     
   # lll配置
   lll:
-    # 最大行长度
-    line-length: 120
+    # 最大行长度（降低以提高可读性）
+    line-length: 100
+    # 允许的长行（URL、导入等）
+    tab-width: 1
     
   # misspell配置
   misspell:
@@ -166,6 +385,9 @@ issues:
     - "Error return value of .((os\\.)?std(out|err)\\..*|.*Close|.*Flush|os\\.Remove(All)?|.*printf?|os\\.(Un)?Setenv). is not checked"
     - "exported (type|method|function) .* should have comment or be unexported"
     - "ST1000: at least one file in a package should have a package comment"
+    - "package comment should be of the form" # 包注释格式
+    - "comment on exported.*should be of the form" # 导出注释格式
+    - "should have comment or be unexported" # 未导出不需要注释
     
   # 排除规则
   exclude-rules:
@@ -177,6 +399,9 @@ issues:
         - dupl
         - gosec
         - lll
+        - gocognit
+        - nestif
+        - gomnd
         
     # 排除main.go的某些检查
     - path: cmd/server/main\.go

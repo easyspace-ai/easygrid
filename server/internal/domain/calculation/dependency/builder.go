@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"regexp"
 
 	"github.com/easyspace-ai/luckdb/server/internal/domain/fields/entity"
 	"github.com/easyspace-ai/luckdb/server/internal/domain/fields/valueobject"
@@ -12,6 +13,8 @@ import (
 // DependencyGraphBuilder 依赖图构建器
 type DependencyGraphBuilder struct {
 	fieldRepo FieldRepository
+	// 用于解析公式表达式的字段列表（可选，用于字段名到ID的映射）
+	allFields []*entity.Field
 }
 
 // FieldRepository 字段仓储接口
@@ -39,6 +42,9 @@ func (b *DependencyGraphBuilder) BuildDependencyGraph(ctx context.Context, table
 	if err != nil {
 		return nil, fmt.Errorf("failed to get fields for table %s: %w", tableID, err)
 	}
+
+	// 保存所有字段，用于公式解析时的字段名到ID映射
+	b.allFields = fields
 
 	var edges []GraphItem
 
@@ -93,22 +99,63 @@ func (b *DependencyGraphBuilder) extractFieldDependencies(field *entity.Field) [
 func (b *DependencyGraphBuilder) extractFormulaDependencies(field *entity.Field, options *valueobject.FieldOptions) []GraphItem {
 	var edges []GraphItem
 
-	// 从options中提取公式表达式
-	// TODO: 实现从公式表达式中解析依赖字段的逻辑
-	// 目前FormulaOptions只有Expression字段，没有预先计算的Dependencies
-	// 需要解析表达式中的字段引用（如 {fieldName} 或 {fieldId}）
+	// ✅ 从公式表达式中解析依赖字段
 	if options != nil && options.Formula != nil {
-		// 这里暂时留空，等实现公式解析器后再填充
-		// dependencies := parseFormulaDependencies(options.Formula.Expression)
-		// for _, depFieldID := range dependencies {
-		// 	edges = append(edges, GraphItem{
-		// 		FromFieldID: field.ID().String(),
-		// 		ToFieldID:   depFieldID,
-		// 	})
-		// }
+		expression := options.Formula.Expression
+		if expression == "" {
+			return edges
+		}
+
+		// 使用正则表达式提取 {fieldName} 或 {fieldId} 引用
+		// 支持格式：{fieldName} 或 {fieldId}
+		re := regexp.MustCompile(`\{([^}]+)\}`)
+		matches := re.FindAllStringSubmatch(expression, -1)
+
+		if len(matches) == 0 {
+			return edges
+		}
+
+		// 提取字段引用并查找对应的字段ID
+		for _, match := range matches {
+			if len(match) > 1 {
+				fieldRef := match[1] // 提取括号内的内容（可能是字段名或字段ID）
+
+				// 查找对应的字段（先尝试作为ID，再尝试作为名称）
+				depField := b.findFieldByRef(fieldRef)
+				if depField != nil && depField.ID().String() != field.ID().String() {
+					edges = append(edges, GraphItem{
+						FromFieldID: depField.ID().String(), // 依赖的字段
+						ToFieldID:   field.ID().String(),    // 当前公式字段
+					})
+				}
+			}
+		}
 	}
 
 	return edges
+}
+
+// findFieldByRef 根据字段引用（ID或名称）查找字段
+func (b *DependencyGraphBuilder) findFieldByRef(fieldRef string) *entity.Field {
+	if b.allFields == nil {
+		return nil
+	}
+
+	// 先尝试作为字段ID查找
+	for _, f := range b.allFields {
+		if f.ID().String() == fieldRef {
+			return f
+		}
+	}
+
+	// 再尝试作为字段名称查找
+	for _, f := range b.allFields {
+		if f.Name().String() == fieldRef {
+			return f
+		}
+	}
+
+	return nil
 }
 
 // extractLookupDependencies 提取Lookup字段的依赖

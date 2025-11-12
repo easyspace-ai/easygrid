@@ -9,7 +9,8 @@ server:
   shutdown_timeout: '10s'
   enable_cors: true
   enable_swagger: true
-  permissions_disabled: true # 开发环境禁用权限检查
+  # ⚠️ 安全：权限检查已启用，不再支持禁用
+  # permissions_disabled: false # 已移除：安全风险
 
 database:
   host: 'localhost'
@@ -23,6 +24,15 @@ database:
   conn_max_lifetime: '2h'    # ✅ 优化：增加连接生命周期（1h -> 2h）
   conn_max_idle_time: '30m' # ✅ 优化：添加空闲连接超时（30分钟）
   log_level: 'info' # 开启所有SQL日志，包括查询表的字段列表
+  slow_query_threshold: '1s' # ✅ 慢查询阈值（默认1秒）
+  enable_query_stats: true   # ✅ 启用查询统计
+
+# ✅ 批量操作配置
+batch:
+  default_size: 100      # 默认批量大小
+  max_size: 1000         # 最大批量大小
+  min_size: 10           # 最小批量大小
+  enable_auto_adjust: true  # 启用自动调整
 
 redis:
   host: 'localhost'

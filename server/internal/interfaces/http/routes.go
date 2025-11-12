@@ -6,6 +6,7 @@ import (
 	"github.com/gin-gonic/gin"
 
 	"github.com/easyspace-ai/luckdb/server/internal/container"
+	"github.com/easyspace-ai/luckdb/server/internal/interfaces/middleware"
 	"github.com/easyspace-ai/luckdb/server/pkg/logger"
 )
 
@@ -19,6 +20,9 @@ func SetupRoutes(router *gin.Engine, cont *container.Container, staticFiles embe
 
 	// API v1路由组
 	v1 := router.Group("/api/v1")
+
+	// 应用输入验证中间件（所有路由）
+	v1.Use(middleware.ValidationMiddleware())
 
 	// 监控端点（无需认证）
 	setupMonitoringRoutes(v1, cont)
@@ -354,10 +358,21 @@ func setupAttachmentRoutes(rg *gin.RouterGroup, cont *container.Container) {
 // setupMonitoringRoutes 设置监控路由
 func setupMonitoringRoutes(rg *gin.RouterGroup, cont *container.Container) {
 	handler := NewMonitoringHandler(cont.DB())
+	
+	// ✅ 设置查询监控器
+	dbConn := cont.DBConnection()
+	if dbConn != nil && dbConn.Monitor != nil {
+		handler.SetMonitor(dbConn.Monitor)
+	}
 
 	monitoring := rg.Group("/monitoring")
 	{
 		monitoring.GET("/db-stats", handler.GetDBStats)
+		// ✅ 新增：查询性能统计接口
+		monitoring.GET("/query-stats", handler.GetQueryStats)
+		monitoring.GET("/query-stats/report", handler.GetQueryStatsReport)
+		monitoring.GET("/slow-queries", handler.GetSlowQueries)
+		monitoring.POST("/query-stats/reset", handler.ResetQueryStats)
 	}
 }
 

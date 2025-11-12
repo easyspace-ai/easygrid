@@ -172,7 +172,29 @@ test-all: test test-coverage ## 运行所有测试并生成覆盖率报告
 
 lint: ## 运行代码检查
 	@echo "🔍 运行代码检查..."
-	golangci-lint run ./...
+	@cd server && golangci-lint run --timeout=5m --verbose ./...
+	@echo "✅ 代码检查完成"
+
+lint-fix: ## 运行代码检查并自动修复
+	@echo "🔧 运行代码检查并自动修复..."
+	@cd server && golangci-lint run --timeout=5m --fix ./...
+	@echo "✅ 代码修复完成"
+
+format: ## 格式化代码
+	@echo "📝 格式化代码..."
+	@cd server && gofmt -w .
+	@cd server && goimports -w .
+	@echo "✅ 代码格式化完成"
+
+format-check: ## 检查代码格式（不修改）
+	@echo "🔍 检查代码格式..."
+	@cd server && gofmt -l . | tee /tmp/gofmt.out
+	@cd server && goimports -l . | tee /tmp/goimports.out
+	@if [ -s /tmp/gofmt.out ] || [ -s /tmp/goimports.out ]; then \
+		echo "❌ 代码格式不符合规范，请运行 'make format' 修复"; \
+		exit 1; \
+	fi
+	@echo "✅ 代码格式检查通过"
 
 fmt: ## 格式化代码
 	@echo "✨ 格式化代码..."
@@ -230,7 +252,7 @@ restart: stop start ## 重启服务器
 
 full-test: clean deps build migrate test ## 完整测试流程（清理+依赖+构建+迁移+测试）
 
-ci: deps build test lint ## CI 流程（依赖+构建+测试+检查）
+ci: deps build test format-check lint ## CI 流程（依赖+构建+测试+格式检查+代码检查）
 
 # ==================== 版本信息 ====================
 

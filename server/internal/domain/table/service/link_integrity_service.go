@@ -166,6 +166,28 @@ func (s *LinkIntegrityService) checkLinks(
 	return recordIDs, nil
 }
 
+// checkColumnExists 检查列是否存在
+func (s *LinkIntegrityService) checkColumnExists(ctx context.Context, baseID, tableName, columnName string) (bool, error) {
+	query := `
+		SELECT COUNT(*) as count
+		FROM information_schema.columns
+		WHERE table_schema = $1
+		AND table_name = $2
+		AND column_name = $3
+	`
+	
+	type Result struct {
+		Count int `gorm:"column:count"`
+	}
+	var result Result
+	
+	if err := s.db.WithContext(ctx).Raw(query, baseID, tableName, columnName).Scan(&result).Error; err != nil {
+		return false, fmt.Errorf("查询列信息失败: %w", err)
+	}
+	
+	return result.Count > 0, nil
+}
+
 // buildCheckLinksMultiValueQuery 构建多值关系的完整性检查查询
 func (s *LinkIntegrityService) buildCheckLinksMultiValueQuery(
 	dbTableName string,

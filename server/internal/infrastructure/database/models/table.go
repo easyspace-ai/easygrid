@@ -19,6 +19,7 @@ type Table struct {
 	DeletedTime      gorm.DeletedAt `gorm:"index" json:"deleted_time"`
 	LastModifiedTime *time.Time     `json:"last_modified_time"`
 	DBTableName      *string        `gorm:"column:db_table_name;type:varchar(255);index" json:"db_table_name"`
+	DBViewName       *string        `gorm:"column:db_view_name;type:varchar(255);index" json:"db_view_name"`
 	Version          *int           `gorm:"column:version;default:1" json:"version"`
 	Order            *float64       `gorm:"column:order;index" json:"order"`
 	LastModifiedBy   *string        `gorm:"column:last_modified_by;type:varchar(50)" json:"last_modified_by"`

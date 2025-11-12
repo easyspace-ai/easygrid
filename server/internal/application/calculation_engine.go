@@ -7,7 +7,6 @@ import (
 	"github.com/easyspace-ai/luckdb/server/internal/domain/fields/entity"
 	"github.com/easyspace-ai/luckdb/server/internal/domain/fields/repository"
 	"github.com/easyspace-ai/luckdb/server/internal/domain/fields/service"
-	"github.com/easyspace-ai/luckdb/server/internal/domain/fields/valueobject"
 	recordEntity "github.com/easyspace-ai/luckdb/server/internal/domain/record/entity"
 	recordRepo "github.com/easyspace-ai/luckdb/server/internal/domain/record/repository"
 	"github.com/easyspace-ai/luckdb/server/pkg/logger"
@@ -52,11 +51,22 @@ func (e *CalculationEngine) CalculateAllFields(ctx context.Context, record *reco
 
 	logger.Info("拓扑排序完成", logger.Int("fields", len(sortedFieldIDs)))
 
+	// ✅ 优化：批量获取所有字段，避免N+1查询
+	fields, err := e.fieldRepo.FindByTableID(ctx, record.TableID())
+	if err != nil {
+		return fmt.Errorf("获取字段列表失败: %w", err)
+	}
+	
+	// 构建字段ID到字段的映射
+	fieldMap := make(map[string]*entity.Field, len(fields))
+	for _, field := range fields {
+		fieldMap[field.ID().String()] = field
+	}
+
 	// 3. 按顺序计算每个字段
 	for _, fieldID := range sortedFieldIDs {
-		fieldIDVO := valueobject.NewFieldID(fieldID)
-		field, _ := e.fieldRepo.FindByID(ctx, fieldIDVO)
-		if field == nil {
+		field, exists := fieldMap[fieldID]
+		if !exists || field == nil {
 			continue
 		}
 
@@ -111,11 +121,22 @@ func (e *CalculationEngine) CalculateAffectedFields(
 		logger.Int("count", len(affectedFieldIDs)),
 		logger.Any("field_ids", affectedFieldIDs))
 
+	// ✅ 优化：批量获取所有字段，避免N+1查询
+	fields, err := e.fieldRepo.FindByTableID(ctx, record.TableID())
+	if err != nil {
+		return fmt.Errorf("获取字段列表失败: %w", err)
+	}
+	
+	// 构建字段ID到字段的映射
+	fieldMap := make(map[string]*entity.Field, len(fields))
+	for _, field := range fields {
+		fieldMap[field.ID().String()] = field
+	}
+
 	// 3. 按顺序计算每个字段
 	for _, fieldID := range affectedFieldIDs {
-		fieldIDVO := valueobject.NewFieldID(fieldID)
-		field, _ := e.fieldRepo.FindByID(ctx, fieldIDVO)
-		if field == nil {
+		field, exists := fieldMap[fieldID]
+		if !exists || field == nil {
 			continue
 		}
 

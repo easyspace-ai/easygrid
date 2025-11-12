@@ -37,8 +37,10 @@ type Field struct {
 	AIConfig            *string `gorm:"column:ai_config;type:text" json:"ai_config"`
 	LookupLinkedFieldID *string `gorm:"column:lookup_linked_field_id;type:varchar(30)" json:"lookup_linked_field_id"`
 	LookupOptions       *string `gorm:"column:lookup_options;type:text" json:"lookup_options"`
+	IsConditionalLookup *bool   `gorm:"column:is_conditional_lookup;default:false" json:"is_conditional_lookup"`
 	HasError            *bool   `gorm:"column:has_error;default:false" json:"has_error"`
 	IsPending           *bool   `gorm:"column:is_pending;default:false" json:"is_pending"`
+	Meta                *string `gorm:"column:meta;type:text" json:"meta"`
 }
 
 func (Field) TableName() string { return "field" }

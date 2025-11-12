@@ -21,6 +21,7 @@ type Config struct {
 	JSVM      JSVMConfig      `mapstructure:"jsvm"`
 	AI        AIConfig        `mapstructure:"ai"`
 	MCP       MCPConfig       `mapstructure:"mcp"`
+	Batch     BatchConfig     `mapstructure:"batch"` // ✅ 批量操作配置
 }
 
 // ServerConfig 服务器配置
@@ -35,7 +36,8 @@ type ServerConfig struct {
 	ShutdownTimeout     time.Duration `mapstructure:"shutdown_timeout"`
 	EnableCORS          bool          `mapstructure:"enable_cors"`
 	EnableSwagger       bool          `mapstructure:"enable_swagger"`
-	PermissionsDisabled bool          `mapstructure:"permissions_disabled"` // 禁用权限检查（仅用于开发）
+	// ⚠️ 安全：PermissionsDisabled字段已移除，权限检查始终启用
+	// PermissionsDisabled bool          `mapstructure:"permissions_disabled"` // 已移除：安全风险
 }
 
 // DatabaseConfig 数据库配置
@@ -51,6 +53,16 @@ type DatabaseConfig struct {
 	ConnMaxLifetime  time.Duration `mapstructure:"conn_max_lifetime"`
 	ConnMaxIdleTime  time.Duration `mapstructure:"conn_max_idle_time"` // ✅ 优化：添加空闲连接超时配置
 	LogLevel        string        `mapstructure:"log_level"`
+	SlowQueryThreshold time.Duration `mapstructure:"slow_query_threshold"` // ✅ 慢查询阈值配置
+	EnableQueryStats   bool          `mapstructure:"enable_query_stats"`   // ✅ 启用查询统计
+}
+
+// BatchConfig 批量操作配置
+type BatchConfig struct {
+	DefaultSize    int  `mapstructure:"default_size"`    // 默认批量大小
+	MaxSize        int  `mapstructure:"max_size"`        // 最大批量大小
+	MinSize        int  `mapstructure:"min_size"`        // 最小批量大小
+	EnableAutoAdjust bool `mapstructure:"enable_auto_adjust"` // ✅ 启用自动调整
 }
 
 // RedisConfig Redis配置
@@ -163,6 +175,11 @@ func Load() (*Config, error) {
 		return nil, fmt.Errorf("failed to unmarshal config: %w", err)
 	}
 
+	// 验证关键安全配置
+	if err := validateSecurityConfig(&config); err != nil {
+		return nil, fmt.Errorf("security config validation failed: %w", err)
+	}
+
 	return &config, nil
 }
 
@@ -179,7 +196,8 @@ func setDefaults() {
 	viper.SetDefault("server.shutdown_timeout", "10s")
 	viper.SetDefault("server.enable_cors", true)
 	viper.SetDefault("server.enable_swagger", true)
-	viper.SetDefault("server.permissions_disabled", false)
+	// ⚠️ 安全：权限检查始终启用，不再支持禁用
+	// viper.SetDefault("server.permissions_disabled", false) // 已移除：安全风险
 
 	// Database defaults
 	viper.SetDefault("database.host", "localhost")
@@ -203,7 +221,8 @@ func setDefaults() {
 	viper.SetDefault("redis.dial_timeout", "5s")
 
 	// JWT defaults
-	viper.SetDefault("jwt.secret", "your-secret-key")
+	// ⚠️ 安全：不设置JWT密钥默认值，必须从环境变量或配置文件提供
+	// viper.SetDefault("jwt.secret", "your-secret-key") // 已移除：安全风险
 	viper.SetDefault("jwt.access_token_ttl", "24h")
 	viper.SetDefault("jwt.refresh_token_ttl", "168h") // 7 days
 	viper.SetDefault("jwt.issuer", "luckdb-api")
@@ -348,4 +367,44 @@ func (c *RedisConfig) GetRedisAddr() string {
 // GetServerAddr 获取服务器监听地址
 func (c *ServerConfig) GetServerAddr() string {
 	return fmt.Sprintf("%s:%d", c.Host, c.Port)
+}
+
+// validateSecurityConfig 验证安全相关配置
+func validateSecurityConfig(cfg *Config) error {
+	// 验证JWT密钥
+	if cfg.JWT.Secret == "" || cfg.JWT.Secret == "your-secret-key" {
+		return fmt.Errorf("JWT secret is required and must not be the default value. Please set LUCKDB_JWT_SECRET environment variable or configure it in config.yaml")
+	}
+
+	// 验证JWT密钥长度（至少32字符）
+	if len(cfg.JWT.Secret) < 32 {
+		return fmt.Errorf("JWT secret must be at least 32 characters long for security. Current length: %d", len(cfg.JWT.Secret))
+	}
+
+	// 验证MCP JWT密钥（如果启用）
+	if cfg.MCP.Auth.JWT.Enabled {
+		mcpSecret := cfg.MCP.Auth.JWT.Secret
+		// 检查是否是环境变量占位符
+		if strings.HasPrefix(mcpSecret, "${") && strings.HasSuffix(mcpSecret, "}") {
+			// 环境变量占位符，viper应该已经解析了
+			// 如果仍然是占位符格式，说明环境变量未设置
+			if mcpSecret == "${JWT_SECRET}" || mcpSecret == "" {
+				// 尝试使用主JWT密钥
+				if cfg.JWT.Secret != "" && cfg.JWT.Secret != "your-secret-key" {
+					cfg.MCP.Auth.JWT.Secret = cfg.JWT.Secret
+				} else {
+					return fmt.Errorf("MCP JWT secret is required when MCP JWT auth is enabled. Please set LUCKDB_MCP_AUTH_JWT_SECRET environment variable or use LUCKDB_JWT_SECRET")
+				}
+			}
+		} else if mcpSecret == "" || mcpSecret == "your-secret-key" {
+			// 如果未设置，尝试使用主JWT密钥
+			if cfg.JWT.Secret != "" && cfg.JWT.Secret != "your-secret-key" {
+				cfg.MCP.Auth.JWT.Secret = cfg.JWT.Secret
+			} else {
+				return fmt.Errorf("MCP JWT secret is required when MCP JWT auth is enabled. Please set LUCKDB_MCP_AUTH_JWT_SECRET environment variable or use LUCKDB_JWT_SECRET")
+			}
+		}
+	}
+
+	return nil
 }

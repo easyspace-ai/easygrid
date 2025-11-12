@@ -40,11 +40,17 @@ func NewConnection(cfg config.DatabaseConfig) (*Connection, error) {
 		logLevel = logger.Info
 	}
 
+	// 设置慢查询阈值（从配置读取，默认1秒）
+	slowThreshold := cfg.SlowQueryThreshold
+	if slowThreshold == 0 {
+		slowThreshold = 1 * time.Second // 默认1秒
+	}
+
 	// 创建自定义SQL日志记录器
 	sqlLogger := NewSQLLogger(
 		appLogger.Logger,
 		logger.Config{
-			SlowThreshold:             200 * time.Millisecond, // 降低慢查询阈值
+			SlowThreshold:             slowThreshold, // ✅ 使用配置的慢查询阈值
 			LogLevel:                  logLevel,
 			IgnoreRecordNotFoundError: true,
 			Colorful:                  true, // 启用彩色输出
@@ -90,8 +96,8 @@ func NewConnection(cfg config.DatabaseConfig) (*Connection, error) {
 		return nil, fmt.Errorf("failed to ping database: %w", err)
 	}
 
-	// 创建查询监控器
-	monitor := NewQueryMonitor(200*time.Millisecond, 100) // 慢查询阈值200ms，最多保存100条
+	// 创建查询监控器（使用配置的慢查询阈值）
+	monitor := NewQueryMonitor(slowThreshold, 100) // ✅ 使用配置的慢查询阈值，最多保存100条
 	
 	// 将监控器注入到 SQL Logger
 	if sqlLogger, ok := gormConfig.Logger.(*SQLLogger); ok {

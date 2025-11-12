@@ -2,6 +2,8 @@ package database
 
 import (
 	"context"
+	"fmt"
+	"sort"
 	"sync"
 	"time"
 
@@ -176,6 +178,137 @@ func (qm *QueryMonitor) GetSlowQueries(limit int) []*QueryStats {
 		start = 0
 	}
 	return qm.slowQueries[start:]
+}
+
+// QueryStatsReport 查询性能统计报告
+type QueryStatsReport struct {
+	GeneratedAt      time.Time                `json:"generated_at"`
+	Summary          QueryStatsSummary        `json:"summary"`
+	QueryTypeStats   map[string]*QueryTypeStats `json:"query_type_stats"`
+	SlowQueries      []*QueryStats            `json:"slow_queries"`
+	TopSlowQueries   []*QueryStats            `json:"top_slow_queries"`
+	Recommendations  []string                 `json:"recommendations"`
+}
+
+// QueryStatsSummary 查询统计摘要
+type QueryStatsSummary struct {
+	TotalQueries    uint64        `json:"total_queries"`
+	TotalDuration   time.Duration `json:"total_duration"`
+	AvgDuration     time.Duration `json:"avg_duration"`
+	SlowQueryCount  int           `json:"slow_query_count"`
+	SlowThreshold   time.Duration `json:"slow_threshold"`
+	ErrorCount      uint64        `json:"error_count"`
+	QueryTypeCount  int           `json:"query_type_count"`
+}
+
+// GenerateReport 生成查询性能统计报告
+// ✅ 新增：查询性能统计报告生成
+func (qm *QueryMonitor) GenerateReport(limit int) *QueryStatsReport {
+	qm.mu.RLock()
+	defer qm.mu.RUnlock()
+
+	// 计算摘要
+	summary := QueryStatsSummary{
+		TotalQueries:   qm.totalQueries,
+		TotalDuration:  qm.totalDuration,
+		SlowQueryCount: len(qm.slowQueries),
+		SlowThreshold:  qm.slowThreshold,
+		QueryTypeCount: len(qm.queryStats),
+	}
+
+	if qm.totalQueries > 0 {
+		summary.AvgDuration = qm.totalDuration / time.Duration(qm.totalQueries)
+	}
+
+	// 计算错误总数
+	for _, stats := range qm.queryStats {
+		summary.ErrorCount += stats.ErrorCount
+	}
+
+	// 获取慢查询列表（需要先释放锁，因为 GetSlowQueries 会再次加锁）
+	slowQueries := make([]*QueryStats, len(qm.slowQueries))
+	copy(slowQueries, qm.slowQueries)
+	
+	if limit <= 0 {
+		limit = 10 // 默认显示前10条
+	}
+
+	// 获取最慢的查询（按持续时间排序）
+	topSlowQueries := make([]*QueryStats, 0, limit)
+	if len(slowQueries) > 0 {
+		// 复制并排序
+		sortedQueries := make([]*QueryStats, len(slowQueries))
+		copy(sortedQueries, slowQueries)
+		sort.Slice(sortedQueries, func(i, j int) bool {
+			return sortedQueries[i].Duration > sortedQueries[j].Duration
+		})
+
+		// 取前N条
+		if len(sortedQueries) > limit {
+			topSlowQueries = sortedQueries[:limit]
+		} else {
+			topSlowQueries = sortedQueries
+		}
+	}
+
+	// 生成优化建议
+	recommendations := qm.generateRecommendations()
+
+	// 复制查询类型统计（避免返回内部引用）
+	queryTypeStatsCopy := make(map[string]*QueryTypeStats)
+	for k, v := range qm.queryStats {
+		statsCopy := *v
+		queryTypeStatsCopy[k] = &statsCopy
+	}
+
+	return &QueryStatsReport{
+		GeneratedAt:     time.Now(),
+		Summary:         summary,
+		QueryTypeStats: queryTypeStatsCopy,
+		SlowQueries:     slowQueries,
+		TopSlowQueries:  topSlowQueries,
+		Recommendations: recommendations,
+	}
+}
+
+// generateRecommendations 生成优化建议
+func (qm *QueryMonitor) generateRecommendations() []string {
+	recommendations := make([]string, 0)
+
+	// 检查慢查询数量
+	if len(qm.slowQueries) > 10 {
+		recommendations = append(recommendations, "检测到大量慢查询，建议检查索引和查询优化")
+	}
+
+	// 检查错误率
+	if qm.totalQueries > 0 {
+		totalErrors := uint64(0)
+		for _, stats := range qm.queryStats {
+			totalErrors += stats.ErrorCount
+		}
+		errorRate := float64(totalErrors) / float64(qm.totalQueries)
+		if errorRate > 0.01 { // 错误率超过1%
+			recommendations = append(recommendations, "查询错误率较高，建议检查数据库连接和查询逻辑")
+		}
+	}
+
+	// 检查平均查询时间
+	if qm.totalQueries > 0 {
+		avgDuration := qm.totalDuration / time.Duration(qm.totalQueries)
+		if avgDuration > 500*time.Millisecond {
+			recommendations = append(recommendations, "平均查询时间较长，建议优化查询和添加索引")
+		}
+	}
+
+	// 检查特定查询类型的性能
+	for queryType, stats := range qm.queryStats {
+		if stats.Count > 100 && stats.AvgDuration > 200*time.Millisecond {
+			recommendations = append(recommendations, 
+				fmt.Sprintf("%s 查询平均耗时较长（%v），建议优化", queryType, stats.AvgDuration))
+		}
+	}
+
+	return recommendations
 }
 
 // Reset 重置统计信息
